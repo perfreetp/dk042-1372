@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { addDays, format, isWithinInterval, isSameDay, differenceInDays } from 'date-fns';
+import { addDays, format, isWithinInterval, differenceInDays } from 'date-fns';
 import {
   AppState,
   AppAction,
@@ -12,20 +12,25 @@ import {
   InspectionTaskStatus,
   InspectionTaskItem,
   DailyFenceSummary,
+  ReviewedEvent,
   RISK_TAG_LABELS,
   RECTIFICATION_STATUS_LABELS,
   RECTIFICATION_TYPE_LABELS,
+  INSPECTION_TASK_STATUS_LABELS,
 } from '../types';
 import {
   schools,
   fenceSummaries,
   fenceEvents,
-  rectifications,
+  rectifications as initialRectifications,
   dailySummaries,
-  inspectionTasks,
+  inspectionTasks as initialInspectionTasks,
+  initialReviewedEvents,
   getSchoolInfoByRoute,
 } from '../data/mockData';
 import { generateId, sortEventsByRisk } from '../utils';
+
+const STORAGE_KEY = 'school_bus_supervision_state_v1';
 
 const initialFilters: Filters = {
   selectedSchoolId: null,
@@ -37,14 +42,68 @@ const initialFilters: Filters = {
   riskLevel: null,
 };
 
+function isDateInRange(date: Date, start: Date, end: Date): boolean {
+  return isWithinInterval(date, {
+    start: new Date(start.getFullYear(), start.getMonth(), start.getDate()),
+    end: new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59),
+  });
+}
+
+function deserializeDates(obj: any): any {
+  if (!obj) return obj;
+  if (obj instanceof Date) return obj;
+  if (Array.isArray(obj)) return obj.map(deserializeDates);
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const key of Object.keys(obj)) {
+      const value = obj[key];
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+        result[key] = new Date(value);
+      } else {
+        result[key] = deserializeDates(value);
+      }
+    }
+    return result;
+  }
+  return obj;
+}
+
+function loadFromStorage(): Partial<AppState> | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return deserializeDates(parsed);
+  } catch (e) {
+    console.warn('Failed to load state from localStorage', e);
+    return null;
+  }
+}
+
+function saveToStorage(state: Partial<AppState>) {
+  try {
+    const toSave = {
+      rectifications: state.rectifications,
+      inspectionTasks: state.inspectionTasks,
+      reviewedEvents: state.reviewedEvents,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch (e) {
+    console.warn('Failed to save state to localStorage', e);
+  }
+}
+
+const storedState = loadFromStorage();
+
 const initialState: Omit<AppState, 'dispatch'> = {
   filters: initialFilters,
   schools,
   fenceSummaries,
   dailySummaries,
   riskEvents: sortEventsByRisk(fenceEvents),
-  rectifications,
-  inspectionTasks,
+  rectifications: storedState?.rectifications || initialRectifications,
+  inspectionTasks: storedState?.inspectionTasks || initialInspectionTasks,
+  reviewedEvents: storedState?.reviewedEvents || initialReviewedEvents,
   selectedEvent: null,
   selectedTaskId: null,
   selectedEventIds: [],
@@ -58,58 +117,58 @@ const initialState: Omit<AppState, 'dispatch'> = {
   },
 };
 
-function isDateInRange(date: Date, start: Date, end: Date): boolean {
-  return isWithinInterval(date, {
-    start: new Date(start.getFullYear(), start.getMonth(), start.getDate()),
-    end: new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59),
-  });
-}
-
 function appReducer(
   state: Omit<AppState, 'dispatch'>,
   action: AppAction
 ): Omit<AppState, 'dispatch'> {
+  let newState: Omit<AppState, 'dispatch'>;
+
   switch (action.type) {
     case 'SET_FILTERS':
-      return {
+      newState = {
         ...state,
         filters: {
           ...state.filters,
           ...action.payload,
         },
       };
+      break;
 
     case 'SELECT_EVENT':
-      return {
+      newState = {
         ...state,
         selectedEvent: action.payload,
       };
+      break;
 
     case 'TOGGLE_EVENT_SELECTION': {
       const id = action.payload;
       const exists = state.selectedEventIds.includes(id);
-      return {
+      newState = {
         ...state,
         selectedEventIds: exists
           ? state.selectedEventIds.filter((eid) => eid !== id)
           : [...state.selectedEventIds, id],
       };
+      break;
     }
 
     case 'CLEAR_EVENT_SELECTION':
-      return {
+      newState = {
         ...state,
         selectedEventIds: [],
       };
+      break;
 
     case 'SET_SELECTED_TASK':
-      return {
+      newState = {
         ...state,
         selectedTaskId: action.payload,
       };
+      break;
 
     case 'CREATE_RECTIFICATION':
-      return {
+      newState = {
         ...state,
         rectifications: [...state.rectifications, action.payload],
         ui: {
@@ -117,9 +176,10 @@ function appReducer(
           showRectificationModal: false,
         },
       };
+      break;
 
     case 'UPDATE_RECTIFICATION_STATUS':
-      return {
+      newState = {
         ...state,
         rectifications: state.rectifications.map((r) =>
           r.id === action.payload.id
@@ -132,9 +192,10 @@ function appReducer(
             : r
         ),
       };
+      break;
 
     case 'CREATE_INSPECTION_TASK':
-      return {
+      newState = {
         ...state,
         inspectionTasks: [action.payload, ...state.inspectionTasks],
         selectedEventIds: [],
@@ -143,10 +204,11 @@ function appReducer(
           showCreateTaskModal: false,
         },
       };
+      break;
 
     case 'UPDATE_TASK_ITEM': {
       const { taskId, eventId, checked, conclusion } = action.payload;
-      return {
+      newState = {
         ...state,
         inspectionTasks: state.inspectionTasks.map((task) =>
           task.id === taskId
@@ -166,81 +228,123 @@ function appReducer(
             : task
         ),
       };
+      break;
     }
 
     case 'UPDATE_TASK_STATUS': {
-      const { taskId, status } = action.payload;
-      return {
+      const { taskId, status, summary } = action.payload;
+      newState = {
         ...state,
         inspectionTasks: state.inspectionTasks.map((task) =>
           task.id === taskId
             ? {
                 ...task,
                 status,
+                summary: summary ?? task.summary,
                 completedAt: status === 'completed' ? new Date() : undefined,
               }
             : task
         ),
       };
+      break;
     }
 
+    case 'ADD_REVIEWED_EVENT':
+      newState = {
+        ...state,
+        reviewedEvents: state.reviewedEvents.some(
+          (r) => r.eventId === action.payload.eventId
+        )
+          ? state.reviewedEvents
+          : [...state.reviewedEvents, action.payload],
+      };
+      break;
+
     case 'TOGGLE_RECTIFICATION_MODAL':
-      return {
+      newState = {
         ...state,
         ui: {
           ...state.ui,
           showRectificationModal: action.payload,
         },
       };
+      break;
 
     case 'TOGGLE_EVENT_DETAIL':
-      return {
+      newState = {
         ...state,
         ui: {
           ...state.ui,
           showEventDetail: action.payload,
         },
       };
+      break;
 
     case 'TOGGLE_CREATE_TASK_MODAL':
-      return {
+      newState = {
         ...state,
         ui: {
           ...state.ui,
           showCreateTaskModal: action.payload,
         },
       };
+      break;
 
     case 'TOGGLE_TASK_DETAIL_MODAL':
-      return {
+      newState = {
         ...state,
         ui: {
           ...state.ui,
           showTaskDetailModal: action.payload,
         },
       };
+      break;
 
     case 'TOGGLE_LEDGER_MODAL':
-      return {
+      newState = {
         ...state,
         ui: {
           ...state.ui,
           showLedgerModal: action.payload,
         },
       };
+      break;
 
     case 'SET_LOADING':
-      return {
+      newState = {
         ...state,
         ui: {
           ...state.ui,
           isLoading: action.payload,
         },
       };
+      break;
+
+    case 'LOAD_STATE_FROM_STORAGE':
+      newState = {
+        ...state,
+        ...action.payload,
+      };
+      break;
 
     default:
-      return state;
+      newState = state;
   }
+
+  saveToStorage(newState);
+  return newState;
+}
+
+interface DashboardSchoolStats {
+  schoolId: string;
+  schoolName: string;
+  highRiskEvents7: number;
+  highRiskEvents30: number;
+  rectificationsIssued7: number;
+  rectificationsIssued30: number;
+  pendingTasks: number;
+  inProgressTasks: number;
+  completedTasks: number;
 }
 
 interface AppStore extends Omit<AppState, 'dispatch'> {
@@ -260,6 +364,7 @@ interface AppStore extends Omit<AppState, 'dispatch'> {
   toggleEventSelection: (eventId: string) => void;
   clearEventSelection: () => void;
   setSelectedTask: (taskId: string | null) => void;
+  addReviewedEvent: (eventId: string) => void;
 
   createRectification: (data: {
     type: Rectification['type'];
@@ -272,14 +377,19 @@ interface AppStore extends Omit<AppState, 'dispatch'> {
     reply?: string
   ) => void;
 
-  createInspectionTask: (data: { name: string; reason: string }) => void;
+  createInspectionTask: (data: {
+    name: string;
+    reason: string;
+    assignee: string;
+    deadlineDays: number;
+  }) => void;
   updateTaskItem: (data: {
     taskId: string;
     eventId: string;
     checked: boolean;
     conclusion?: string;
   }) => void;
-  updateTaskStatus: (taskId: string, status: InspectionTaskStatus) => void;
+  updateTaskStatus: (taskId: string, status: InspectionTaskStatus, summary?: string) => void;
 
   getFilteredSummaries: () => FenceSummary[];
   getFilteredEvents: () => FenceEvent[];
@@ -287,6 +397,7 @@ interface AppStore extends Omit<AppState, 'dispatch'> {
   getFilteredTasks: () => InspectionTask[];
 
   getRectificationByEventId: (eventId: string) => Rectification | undefined;
+  isEventReviewed: (eventId: string) => boolean;
 
   getStatistics: () => {
     totalFenceEvents: number;
@@ -297,6 +408,25 @@ interface AppStore extends Omit<AppState, 'dispatch'> {
     overdueRectifications: number;
     totalTasks: number;
     pendingTasks: number;
+    reviewedEvents: number;
+    pendingReviewEvents: number;
+  };
+
+  getTaskCompletionRate: (taskId: string) => { checked: number; total: number; rate: number; canComplete: boolean };
+
+  getDashboardData: () => {
+    overview: {
+      totalSchools: number;
+      totalBuses: number;
+      totalRoutes: number;
+      highRiskEvents7: number;
+      highRiskEvents30: number;
+      totalRectifications: number;
+      overdueRectifications: number;
+      pendingTasks: number;
+      completedTasks7: number;
+    };
+    schoolStats: DashboardSchoolStats[];
   };
 
   getLedgerData: () => {
@@ -322,6 +452,7 @@ interface AppStore extends Omit<AppState, 'dispatch'> {
       riskTags: string[];
       riskScore: number;
       rectificationStatus: string;
+      reviewed: boolean;
     }>;
     rectifications: Array<{
       no: number;
@@ -333,6 +464,17 @@ interface AppStore extends Omit<AppState, 'dispatch'> {
       deadline: string;
       status: string;
       daysLeft: string;
+    }>;
+    inspectionTasks: Array<{
+      no: number;
+      taskName: string;
+      assignee: string;
+      createdAt: string;
+      deadline: string;
+      status: string;
+      completionRate: string;
+      completedAt: string;
+      summary: string;
     }>;
   };
 }
@@ -409,6 +551,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setSelectedTask: (taskId) =>
     set((state) => appReducer(state, { type: 'SET_SELECTED_TASK', payload: taskId })),
 
+  addReviewedEvent: (eventId) =>
+    set((state) =>
+      appReducer(state, {
+        type: 'ADD_REVIEWED_EVENT',
+        payload: { eventId, reviewedAt: new Date() },
+      })
+    ),
+
   createRectification: (data) => {
     const state = get();
     const event = state.selectedEvent;
@@ -468,8 +618,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       name: data.name,
       reason: data.reason,
       createdAt: new Date(),
+      deadline: addDays(new Date(), data.deadlineDays),
       status: 'pending',
       createdBy: '王科长',
+      assignee: data.assignee,
       items,
     };
 
@@ -481,9 +633,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   updateTaskItem: (data) =>
     set((state) => appReducer(state, { type: 'UPDATE_TASK_ITEM', payload: data })),
 
-  updateTaskStatus: (taskId, status) =>
+  updateTaskStatus: (taskId, status, summary) =>
     set((state) =>
-      appReducer(state, { type: 'UPDATE_TASK_STATUS', payload: { taskId, status } })
+      appReducer(state, { type: 'UPDATE_TASK_STATUS', payload: { taskId, status, summary } })
     ),
 
   getFilteredSummaries: () => {
@@ -615,10 +767,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     return get().rectifications.find((r) => r.eventId === eventId);
   },
 
+  isEventReviewed: (eventId) => {
+    return get().reviewedEvents.some((r) => r.eventId === eventId);
+  },
+
   getStatistics: () => {
     const state = get();
     const summaries = state.getFilteredSummaries();
     const events = state.getFilteredEvents();
+    const reviewedEventIds = state.reviewedEvents.map((r) => r.eventId);
 
     const totalFenceEvents = summaries.reduce(
       (sum, s) => sum + s.schoolFenceCount + s.pickupFenceCount + s.dangerFenceCount,
@@ -642,6 +799,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const totalTasks = tasks.length;
     const pendingTasks = tasks.filter((t) => t.status !== 'completed').length;
 
+    const reviewedCount = events.filter((e) => reviewedEventIds.includes(e.id)).length;
+    const pendingReviewCount = events.filter(
+      (e) => !reviewedEventIds.includes(e.id)
+    ).length;
+
     return {
       totalFenceEvents,
       normalEvents: Math.max(0, totalFenceEvents - abnormalEvents),
@@ -651,6 +813,132 @@ export const useAppStore = create<AppStore>((set, get) => ({
       overdueRectifications,
       totalTasks,
       pendingTasks,
+      reviewedEvents: reviewedCount,
+      pendingReviewEvents: pendingReviewCount,
+    };
+  },
+
+  getTaskCompletionRate: (taskId) => {
+    const state = get();
+    const task = state.inspectionTasks.find((t) => t.id === taskId);
+    if (!task) return { checked: 0, total: 0, rate: 0, canComplete: false };
+
+    const total = task.items.length;
+    const checkedItems = task.items.filter((i) => i.checked && i.conclusion && i.conclusion.trim().length > 0);
+    const checked = checkedItems.length;
+    const rate = total > 0 ? Math.round((checked / total) * 100) : 0;
+    const canComplete = checked === total && total > 0;
+
+    return { checked, total, rate, canComplete };
+  },
+
+  getDashboardData: () => {
+    const state = get();
+    const now = new Date();
+    const sevenDaysAgo = addDays(now, -7);
+    const thirtyDaysAgo = addDays(now, -30);
+
+    const events7 = state.riskEvents.filter(
+      (e) =>
+        isDateInRange(e.entryTime, sevenDaysAgo, now) &&
+        (e.riskLevel === 'high' || e.riskLevel === 'critical')
+    );
+    const events30 = state.riskEvents.filter(
+      (e) =>
+        isDateInRange(e.entryTime, thirtyDaysAgo, now) &&
+        (e.riskLevel === 'high' || e.riskLevel === 'critical')
+    );
+
+    const rects7 = state.rectifications.filter((r) =>
+      isDateInRange(r.createdAt, sevenDaysAgo, now)
+    );
+    const totalRects = state.rectifications;
+    const overdueRects = state.rectifications.filter(
+      (r) =>
+        r.status === 'overdue' || (r.status === 'pending' && r.deadline < now)
+    );
+
+    const tasks = state.inspectionTasks;
+    const pendingTasks = tasks.filter((t) => t.status === 'pending').length;
+    const completedTasks7 = tasks.filter(
+      (t) => t.status === 'completed' && t.completedAt && isDateInRange(t.completedAt, sevenDaysAgo, now)
+    ).length;
+
+    const totalBuses = schools.reduce((sum, s) => sum + s.busCount, 0);
+    const totalRoutes = schools.reduce((sum, s) => sum + s.routeCount, 0);
+
+    const schoolStatsMap: Record<string, DashboardSchoolStats> = {};
+
+    for (const school of schools) {
+      schoolStatsMap[school.id] = {
+        schoolId: school.id,
+        schoolName: school.name,
+        highRiskEvents7: 0,
+        highRiskEvents30: 0,
+        rectificationsIssued7: 0,
+        rectificationsIssued30: 0,
+        pendingTasks: 0,
+        inProgressTasks: 0,
+        completedTasks: 0,
+      };
+    }
+
+    for (const event of events7) {
+      const info = getSchoolInfoByRoute(event.routeId);
+      if (schoolStatsMap[info.schoolId]) {
+        schoolStatsMap[info.schoolId].highRiskEvents7++;
+      }
+    }
+    for (const event of events30) {
+      const info = getSchoolInfoByRoute(event.routeId);
+      if (schoolStatsMap[info.schoolId]) {
+        schoolStatsMap[info.schoolId].highRiskEvents30++;
+      }
+    }
+
+    for (const rect of state.rectifications) {
+      if (schoolStatsMap[rect.schoolId]) {
+        if (isDateInRange(rect.createdAt, sevenDaysAgo, now)) {
+          schoolStatsMap[rect.schoolId].rectificationsIssued7++;
+        }
+        if (isDateInRange(rect.createdAt, thirtyDaysAgo, now)) {
+          schoolStatsMap[rect.schoolId].rectificationsIssued30++;
+        }
+      }
+    }
+
+    for (const task of tasks) {
+      const schoolIds = new Set<string>();
+      for (const item of task.items) {
+        const info = getSchoolInfoByRoute(item.event.routeId);
+        schoolIds.add(info.schoolId);
+      }
+      for (const schoolId of schoolIds) {
+        if (schoolStatsMap[schoolId]) {
+          if (task.status === 'pending') schoolStatsMap[schoolId].pendingTasks++;
+          if (task.status === 'in_progress') schoolStatsMap[schoolId].inProgressTasks++;
+          if (task.status === 'completed') schoolStatsMap[schoolId].completedTasks++;
+        }
+      }
+    }
+
+    const schoolStats = Object.values(schoolStatsMap).sort(
+      (a, b) => b.highRiskEvents7 - a.highRiskEvents7
+    );
+
+    return {
+      overview: {
+        totalSchools: schools.length,
+        totalBuses,
+        totalRoutes,
+        highRiskEvents7: events7.length,
+        highRiskEvents30: events30.length,
+        totalRectifications: totalRects.length,
+        overdueRectifications: overdueRects.length,
+        pendingTasks,
+        completedTasks7,
+      },
+      schoolStats,
     };
   },
 
@@ -659,7 +947,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const summaries = state.getFilteredSummaries();
     const events = state.getFilteredEvents();
     const rects = state.getFilteredRectifications();
+    const tasks = state.getFilteredTasks();
     const { start, end } = state.filters.dateRange;
+    const reviewedEventIds = state.reviewedEvents.map((r) => r.eventId);
 
     const schoolMap: Record<string, {
       schoolId: string;
@@ -718,6 +1008,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         rectificationStatus: rect
           ? RECTIFICATION_STATUS_LABELS[rect.status]
           : '未整改',
+        reviewed: reviewedEventIds.includes(event.id),
       };
     });
 
@@ -747,11 +1038,27 @@ export const useAppStore = create<AppStore>((set, get) => ({
       };
     });
 
+    const inspectionTasksData = tasks.map((t, idx) => {
+      const rate = state.getTaskCompletionRate(t.id);
+      return {
+        no: idx + 1,
+        taskName: t.name,
+        assignee: t.assignee,
+        createdAt: format(t.createdAt, 'yyyy-MM-dd'),
+        deadline: format(t.deadline, 'yyyy-MM-dd'),
+        status: INSPECTION_TASK_STATUS_LABELS[t.status],
+        completionRate: `${rate.checked}/${rate.total} (${rate.rate}%)`,
+        completedAt: t.completedAt ? format(t.completedAt, 'yyyy-MM-dd') : '-',
+        summary: t.summary || '-',
+      };
+    });
+
     return {
       dateRange: { start, end },
       schoolSummaries,
       riskEvents: riskEventsData,
       rectifications: rectificationsData,
+      inspectionTasks: inspectionTasksData,
     };
   },
 }));

@@ -108,10 +108,18 @@ export interface InspectionTask {
   name: string;
   reason: string;
   createdAt: Date;
+  deadline: Date;
   status: InspectionTaskStatus;
   items: InspectionTaskItem[];
   createdBy: string;
+  assignee: string;
   completedAt?: Date;
+  summary?: string;
+}
+
+export interface ReviewedEvent {
+  eventId: string;
+  reviewedAt: Date;
 }
 
 export const INSPECTION_TASK_STATUS_LABELS: Record<InspectionTaskStatus, string> = {
@@ -148,6 +156,7 @@ export interface AppState {
   riskEvents: FenceEvent[];
   rectifications: Rectification[];
   inspectionTasks: InspectionTask[];
+  reviewedEvents: ReviewedEvent[];
   selectedEvent: FenceEvent | null;
   selectedTaskId: string | null;
   selectedEventIds: string[];
@@ -183,10 +192,12 @@ export type AppAction =
       type: 'UPDATE_TASK_ITEM';
       payload: { taskId: string; eventId: string; checked: boolean; conclusion?: string };
     }
-  | { type: 'UPDATE_TASK_STATUS'; payload: { taskId: string; status: InspectionTaskStatus } }
+  | { type: 'UPDATE_TASK_STATUS'; payload: { taskId: string; status: InspectionTaskStatus; summary?: string } }
   | { type: 'TOGGLE_CREATE_TASK_MODAL'; payload: boolean }
   | { type: 'TOGGLE_TASK_DETAIL_MODAL'; payload: boolean }
-  | { type: 'TOGGLE_LEDGER_MODAL'; payload: boolean };
+  | { type: 'TOGGLE_LEDGER_MODAL'; payload: boolean }
+  | { type: 'ADD_REVIEWED_EVENT'; payload: ReviewedEvent }
+  | { type: 'LOAD_STATE_FROM_STORAGE'; payload: Partial<AppState> };
 
 export const RISK_TAG_LABELS: Record<RiskTagType, string> = {
   frequent_detour: '频繁绕行',

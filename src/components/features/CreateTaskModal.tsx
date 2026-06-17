@@ -15,8 +15,10 @@ export function CreateTaskModal() {
   } = useAppStore();
 
   const today = format(new Date(), 'yyyy-MM-dd');
-  const [taskName, setTaskName] = useState(`${today}高风险事件抽查`);
+  const [taskName, setTaskName] = useState(`${today} 高风险事件抽查`);
   const [reason, setReason] = useState('本次抽查针对高评分风险事件进行现场核实。');
+  const [assignee, setAssignee] = useState('李科员');
+  const [deadlineDays, setDeadlineDays] = useState(7);
 
   if (!ui.showCreateTaskModal) return null;
 
@@ -24,9 +26,11 @@ export function CreateTaskModal() {
 
   const handleSubmit = () => {
     if (!taskName.trim() || !reason.trim() || selectedEventIds.length === 0) return;
-    createInspectionTask({ name: taskName, reason });
-    setTaskName(`${today}高风险事件抽查`);
+    createInspectionTask({ name: taskName, reason, assignee, deadlineDays });
+    setTaskName(`${today} 高风险事件抽查`);
     setReason('本次抽查针对高评分风险事件进行现场核实。');
+    setAssignee('李科员');
+    setDeadlineDays(7);
   };
 
   return (
@@ -69,6 +73,34 @@ export function CreateTaskModal() {
               className="input resize-none"
               placeholder="请输入抽查理由"
             />
+          </div>
+
+          <div>
+            <label className="label">抽查人</label>
+            <select
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
+              className="input"
+            >
+              <option value="王科长">王科长</option>
+              <option value="李科员">李科员</option>
+              <option value="张科员">张科员</option>
+              <option value="刘科员">刘科员</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="label">整改期限</label>
+            <select
+              value={deadlineDays}
+              onChange={(e) => setDeadlineDays(Number(e.target.value))}
+              className="input"
+            >
+              <option value={3}>3天</option>
+              <option value={7}>7天</option>
+              <option value={15}>15天</option>
+              <option value={30}>30天</option>
+            </select>
           </div>
 
           <div>

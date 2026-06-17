@@ -14,12 +14,14 @@ import { Header } from '../../components/layout/Header';
 import { useAppStore } from '../../store/useAppStore';
 import {
   formatDate,
+  getDaysRemaining,
 } from '../../utils';
 import {
   INSPECTION_TASK_STATUS_LABELS,
   InspectionTask,
   InspectionTaskStatus,
 } from '../../types';
+import { getSchoolInfoByRoute } from '../../data/mockData';
 
 function getTaskStatusColor(status: InspectionTaskStatus): string {
   const colors: Record<InspectionTaskStatus, string> = {
@@ -33,7 +35,8 @@ function getTaskStatusColor(status: InspectionTaskStatus): string {
 function getUniqueSchoolCount(task: InspectionTask): number {
   const schoolIds = new Set<string>();
   task.items.forEach((item) => {
-    schoolIds.add(item.event.routeId);
+    const schoolInfo = getSchoolInfoByRoute(item.event.routeId);
+    schoolIds.add(schoolInfo.schoolId);
   });
   return schoolIds.size;
 }
@@ -49,6 +52,7 @@ export function InspectionTasksPage() {
     openCreateTaskModal,
     setSelectedTask,
     openTaskDetailModal,
+    getTaskCompletionRate,
   } = useAppStore();
 
   const tasks = getFilteredTasks();
@@ -57,6 +61,7 @@ export function InspectionTasksPage() {
   const pendingCount = tasks.filter((t) => t.status === 'pending').length;
   const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
+  const overdueCount = tasks.filter((t) => t.status !== 'completed' && getDaysRemaining(t.deadline) < 0).length;
 
   const handleStartInspection = (taskId: string) => {
     updateTaskStatus(taskId, 'in_progress');
@@ -91,7 +96,7 @@ export function InspectionTasksPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-5 gap-6 mb-8">
           <div className="card p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -147,6 +152,20 @@ export function InspectionTasksPage() {
               </div>
             </div>
           </div>
+
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">超期任务</p>
+                <p className="text-3xl font-bold text-red-600">
+                  {overdueCount}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-red-500 rounded-lg flex items-center justify-center">
+                <Clock className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="card">
@@ -166,8 +185,13 @@ export function InspectionTasksPage() {
             {tasks.length > 0 ? (
               tasks.map((task) => {
                 const isCompleted = task.status === 'completed';
-                const checkedCount = getCheckedCount(task);
+                const completionRate = getTaskCompletionRate(task.id);
                 const schoolCount = getUniqueSchoolCount(task);
+                const daysRemaining = getDaysRemaining(task.deadline);
+                const isOverdue = !isCompleted && daysRemaining < 0;
+                const summaryText = task.summary && task.summary.length > 30
+                  ? task.summary.substring(0, 30) + '...'
+                  : task.summary;
 
                 return (
                   <div
@@ -187,24 +211,58 @@ export function InspectionTasksPage() {
                           </h4>
                         </div>
 
-                        <div className="flex items-center gap-6 text-sm text-gray-600 flex-wrap">
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm text-gray-600 mb-3">
+                          <span className="flex items-center gap-1.5">
+                            <User className="w-4 h-4 text-gray-400" />
+                            抽查人：{task.assignee}
+                          </span>
                           <span className="flex items-center gap-1.5">
                             <User className="w-4 h-4 text-gray-400" />
                             创建人：{task.createdBy}
+                          </span>
+                          <span className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            截止日期：{formatDate(task.deadline)}
+                            {isOverdue && ' (已超期)'}
                           </span>
                           <span className="flex items-center gap-1.5">
                             <Calendar className="w-4 h-4 text-gray-400" />
                             创建时间：{formatDate(task.createdAt)}
                           </span>
                           <span className="flex items-center gap-1.5">
-                            <ListCheck className="w-4 h-4 text-gray-400" />
-                            事件进度：{checkedCount}/{task.items.length}
+                            <Building2 className="w-4 h-4 text-gray-400" />
+                            涉及学校：{schoolCount} 所
                           </span>
                           <span className="flex items-center gap-1.5">
-                            <Building2 className="w-4 h-4 text-gray-400" />
-                            涉及学校：{schoolCount}
+                            <ListCheck className="w-4 h-4 text-gray-400" />
+                            完成 {completionRate.checked}/{completionRate.total} ({completionRate.rate}%)
                           </span>
                         </div>
+
+                        {!isCompleted && (
+                          <div className="mb-3">
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="bg-primary-500 h-2 rounded-full transition-all"
+                                style={{ width: `${completionRate.rate}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {isCompleted && task.completedAt && (
+                          <div className="bg-green-50 rounded-lg p-3 text-sm">
+                            <div className="flex items-center gap-1.5 text-green-700 mb-1">
+                              <CheckCircle className="w-4 h-4" />
+                              <span className="font-medium">完成时间：{formatDate(task.completedAt)}</span>
+                            </div>
+                            {summaryText && (
+                              <p className="text-gray-600 text-xs mt-1">
+                                结论摘要：{summaryText}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">

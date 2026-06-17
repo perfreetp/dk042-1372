@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Bus,
   ListChecks,
+  BarChart3,
 } from 'lucide-react';
 
 const navItems = [
@@ -27,6 +28,11 @@ const navItems = [
     path: '/rectification',
     label: '整改跟踪',
     icon: ClipboardCheck,
+  },
+  {
+    path: '/dashboard',
+    label: '复盘看板',
+    icon: BarChart3,
   },
 ];
 

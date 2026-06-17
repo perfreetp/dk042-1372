@@ -9,6 +9,7 @@ import {
   DailyFenceSummary,
   InspectionTask,
   InspectionTaskStatus,
+  ReviewedEvent,
 } from '../types';
 
 const drivers = [
@@ -429,8 +430,10 @@ export const inspectionTasks: InspectionTask[] = [
     name: '6月第三周高风险事件专项抽查',
     reason: '本周夜间异常移动和站点外上下车风险事件集中，需重点抽查核实。',
     createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+    deadline: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
     status: 'in_progress' as InspectionTaskStatus,
     createdBy: '王科长',
+    assignee: '李科员',
     items: [
       {
         eventId: 'e1',
@@ -456,9 +459,12 @@ export const inspectionTasks: InspectionTask[] = [
     name: '阳光镇中心小学围栏执行例行抽查',
     reason: '月度例行抽查，覆盖阳光镇中心小学所有线路。',
     createdAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000),
+    deadline: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
     status: 'completed' as InspectionTaskStatus,
     createdBy: '王科长',
+    assignee: '王科长',
     completedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+    summary: '本次抽查共1条风险事件，已全部核实完毕。未进入围栏系因学校正门施工，情况属实，已督促学校完善变更备案流程。',
     items: [
       {
         eventId: 'e2',
@@ -469,4 +475,9 @@ export const inspectionTasks: InspectionTask[] = [
       },
     ],
   },
+];
+
+export const initialReviewedEvents: ReviewedEvent[] = [
+  { eventId: 'e9', reviewedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) },
+  { eventId: 'e10', reviewedAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000) },
 ];

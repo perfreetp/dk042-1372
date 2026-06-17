@@ -12,7 +12,7 @@ export function LedgerModal() {
   const ledgerData = getLedgerData();
 
   const handleCopyAll = async () => {
-    const { dateRange, schoolSummaries, riskEvents, rectifications } = ledgerData;
+    const { dateRange, schoolSummaries, riskEvents, rectifications, inspectionTasks } = ledgerData;
 
     const dateRangeText = `日期范围：${format(dateRange.start, 'yyyy-MM-dd')} 至 ${format(dateRange.end, 'yyyy-MM-dd')}\n\n`;
 
@@ -60,7 +60,22 @@ export function LedgerModal() {
     ]);
     const sectionCText = buildTextTable(sectionCHeaders, sectionCRows);
 
-    const fullText = dateRangeText + sectionATitle + sectionAText + sectionBTitle + sectionBText + sectionCTitle + sectionCText;
+    const sectionDTitle = '\n四、抽查任务清单\n';
+    const sectionDHeaders = ['序号', '任务名称', '抽查人', '创建日期', '截止日期', '状态', '完成进度', '完成时间', '任务总结'];
+    const sectionDRows = inspectionTasks.map((t) => [
+      String(t.no),
+      t.taskName,
+      t.assignee,
+      t.createdAt,
+      t.deadline,
+      t.status,
+      t.completionRate,
+      t.completedAt,
+      t.summary,
+    ]);
+    const sectionDText = buildTextTable(sectionDHeaders, sectionDRows);
+
+    const fullText = dateRangeText + sectionATitle + sectionAText + sectionBTitle + sectionBText + sectionCTitle + sectionCText + sectionDTitle + sectionDText;
 
     await navigator.clipboard.writeText(fullText);
     setShowToast(true);
@@ -314,6 +329,62 @@ export function LedgerModal() {
                           }>
                             {rect.daysLeft}
                           </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section>
+            <h4 className="text-base font-semibold text-gray-900 mb-3">四、抽查任务清单</h4>
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">序号</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">任务名称</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">抽查人</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">创建日期</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">截止日期</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">状态</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">完成进度</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">完成时间</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">任务总结</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerData.inspectionTasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
+                        暂无数据
+                      </td>
+                    </tr>
+                  ) : (
+                    ledgerData.inspectionTasks.map((task) => (
+                      <tr key={task.no} className={task.no % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">{task.no}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">{task.taskName}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">{task.assignee}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">{task.createdAt}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">{task.deadline}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">
+                          <span className={
+                            task.status === '已完成' ? 'badge badge-success' :
+                            task.status === '进行中' ? 'badge badge-primary' :
+                            'badge badge-warning'
+                          }>
+                            {task.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">{task.completionRate}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">{task.completedAt}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200 max-w-xs">
+                          <div className="line-clamp-2" title={task.summary}>
+                            {task.summary}
+                          </div>
                         </td>
                       </tr>
                     ))

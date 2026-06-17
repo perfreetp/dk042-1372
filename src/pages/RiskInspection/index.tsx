@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   AlertTriangle,
   Clock,
@@ -10,6 +9,7 @@ import {
   CheckCircle2,
   CheckSquare,
   Square,
+  ListChecks,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { FilterBar } from '../../components/features/FilterBar';
@@ -43,9 +43,9 @@ export function RiskInspectionPage() {
     clearEventSelection,
     openCreateTaskModal,
     getRectificationByEventId,
+    isEventReviewed,
+    addReviewedEvent,
   } = useAppStore();
-
-  const [viewedEvents, setViewedEvents] = useState<Set<string>>(new Set());
 
   const events = getFilteredEvents();
   const stats = getStatistics();
@@ -53,7 +53,7 @@ export function RiskInspectionPage() {
   const handleViewDetail = (event: FenceEvent) => {
     selectEvent(event);
     openEventDetail();
-    setViewedEvents((prev) => new Set([...prev, event.id]));
+    addReviewedEvent(event.id);
   };
 
   const handleCreateRectification = (event: FenceEvent) => {
@@ -65,6 +65,10 @@ export function RiskInspectionPage() {
     (e) => e.riskLevel === 'high' || e.riskLevel === 'critical'
   ).length;
 
+  const pendingReviewCount = events.filter((e) => !isEventReviewed(e.id)).length;
+  const reviewedCount = events.filter((e) => isEventReviewed(e.id)).length;
+  const selectedCount = events.filter((e) => selectedEventIds.includes(e.id)).length;
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <Header
@@ -75,7 +79,7 @@ export function RiskInspectionPage() {
       <div className="flex-1 overflow-y-auto p-8">
         <FilterBar />
 
-        <div className="grid grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-4 gap-6 mb-8">
           <div className="card p-6 bg-gradient-to-br from-danger-50 to-white">
             <div className="flex items-center justify-between">
               <div>
@@ -93,9 +97,9 @@ export function RiskInspectionPage() {
           <div className="card p-6 bg-gradient-to-br from-warning-50 to-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 mb-1">待核查事件</p>
+                <p className="text-sm text-gray-500 mb-1">待核查</p>
                 <p className="text-3xl font-bold text-warning-600">
-                  {events.filter((e) => !viewedEvents.has(e.id)).length}
+                  {pendingReviewCount}
                 </p>
               </div>
               <div className="w-12 h-12 bg-warning-500 rounded-lg flex items-center justify-center">
@@ -107,13 +111,27 @@ export function RiskInspectionPage() {
           <div className="card p-6 bg-gradient-to-br from-success-50 to-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 mb-1">已核查事件</p>
+                <p className="text-sm text-gray-500 mb-1">已核查</p>
                 <p className="text-3xl font-bold text-success-600">
-                  {viewedEvents.size}
+                  {reviewedCount}
                 </p>
               </div>
               <div className="w-12 h-12 bg-success-500 rounded-lg flex items-center justify-center">
                 <CheckCircle2 className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-6 bg-gradient-to-br from-primary-50 to-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">已选择</p>
+                <p className="text-3xl font-bold text-primary-600">
+                  {selectedCount}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-primary-500 rounded-lg flex items-center justify-center">
+                <ListChecks className="w-6 h-6 text-white" />
               </div>
             </div>
           </div>
@@ -161,7 +179,7 @@ export function RiskInspectionPage() {
           <div className="divide-y divide-gray-100">
             {events.length > 0 ? (
               events.map((event, index) => {
-                const isViewed = viewedEvents.has(event.id);
+                const isReviewed = isEventReviewed(event.id);
                 const isSelected = selectedEventIds.includes(event.id);
                 const rect = getRectificationByEventId(event.id);
 
@@ -169,7 +187,7 @@ export function RiskInspectionPage() {
                   <div
                     key={event.id}
                     className={`p-5 hover:bg-gray-50 transition-all ${
-                      isViewed ? 'opacity-75' : ''
+                      isReviewed ? 'opacity-75' : ''
                     } ${
                       isSelected ? 'bg-primary-50' : ''
                     }`}
@@ -213,7 +231,7 @@ export function RiskInspectionPage() {
                               <span className="text-sm text-gray-500">
                                 {event.routeName}
                               </span>
-                              {isViewed && (
+                              {isReviewed && (
                                 <span className="flex items-center gap-1 text-xs text-success-600">
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   已核查
