@@ -5,6 +5,7 @@ import {
   RectificationType,
   RECTIFICATION_TYPE_LABELS,
 } from '../../types';
+import { getSchoolInfoByRoute } from '../../data/mockData';
 
 const deadlineOptions = [
   { value: 3, label: '3个工作日' },
@@ -24,10 +25,10 @@ export function RectificationModal() {
   const [deadlineDays, setDeadlineDays] = useState(7);
   const [requirement, setRequirement] = useState('');
 
-  if (!ui.showRectificationModal || !selectedEvent) return null;
+  if (!ui.showRectificationModal) return null;
 
   const handleSubmit = () => {
-    if (!requirement.trim()) return;
+    if (!selectedEvent || !requirement.trim()) return;
     createRectification({ type, requirement, deadlineDays });
     setType('explain');
     setDeadlineDays(7);
@@ -35,6 +36,7 @@ export function RectificationModal() {
   };
 
   const getDefaultRequirement = () => {
+    if (!selectedEvent) return '';
     const eventDesc = `${selectedEvent.busPlate}于${selectedEvent.entryTime.toLocaleDateString()}${
       selectedEvent.riskTags.length > 0
         ? '存在' + selectedEvent.riskTags.map((t) => t.description).join('、')
@@ -73,18 +75,42 @@ export function RectificationModal() {
         </div>
 
         <div className="p-6 space-y-5">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-xs text-gray-500 mb-1">关联事件</p>
-            <p className="text-sm text-gray-900">
-              <span className="font-medium">{selectedEvent.busPlate}</span>
-              <span className="mx-2 text-gray-400">|</span>
-              {selectedEvent.routeName}
-            </p>
-            <p className="text-sm text-gray-600 mt-1">
-              {selectedEvent.fenceName} -{' '}
-              {selectedEvent.riskTags.map((t) => t.description).join('，')}
-            </p>
+          <div className="bg-gray-100 rounded-lg p-4 border border-gray-200">
+            <p className="text-xs font-medium text-gray-500 mb-3">关联信息（自动带出）</p>
+            {selectedEvent ? (
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <span className="text-xs text-gray-500 w-12 shrink-0">学校</span>
+                  <span className="text-sm text-gray-900 font-medium">
+                    {getSchoolInfoByRoute(selectedEvent.routeId).schoolName}
+                  </span>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-xs text-gray-500 w-12 shrink-0">线路</span>
+                  <span className="text-sm text-gray-900 font-medium">
+                    {selectedEvent.routeName}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">请先在风险抽查列表选择一个事件</p>
+            )}
           </div>
+
+          {selectedEvent && (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-xs text-gray-500 mb-1">关联事件</p>
+              <p className="text-sm text-gray-900">
+                <span className="font-medium">{selectedEvent.busPlate}</span>
+                <span className="mx-2 text-gray-400">|</span>
+                {selectedEvent.routeName}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                {selectedEvent.fenceName} -{' '}
+                {selectedEvent.riskTags.map((t) => t.description).join('，')}
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="label">整改类型</label>
@@ -158,11 +184,11 @@ export function RectificationModal() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!requirement.trim()}
+            disabled={!selectedEvent || !requirement.trim()}
             className="btn-primary"
           >
             <Send className="w-4 h-4 mr-2" />
-            发送整改通知
+            下发整改
           </button>
         </div>
       </div>

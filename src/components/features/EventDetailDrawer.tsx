@@ -7,19 +7,23 @@ import {
   AlertTriangle,
   FileEdit,
   Shield,
+  FileCheck,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { formatDateTime, formatTime, getRiskLevelBgClass } from '../../utils';
+import { formatDateTime, formatTime, getRiskLevelBgClass, getRectificationStatusColor, formatDate } from '../../utils';
 import { RiskScoreBar } from '../ui/RiskScoreBar';
 import { RiskTagBadge } from '../ui/RiskTagBadge';
 import {
   FENCE_TYPE_LABELS,
   RISK_LEVEL_LABELS,
+  RECTIFICATION_STATUS_LABELS,
+  RECTIFICATION_TYPE_LABELS,
 } from '../../types';
 
 export function EventDetailDrawer() {
-  const { ui, selectedEvent, closeEventDetail, openRectificationModal } =
+  const { ui, selectedEvent, closeEventDetail, openRectificationModal, getRectificationByEventId } =
     useAppStore();
+  const rect = selectedEvent ? getRectificationByEventId(selectedEvent.id) : undefined;
 
   if (!ui.showEventDetail || !selectedEvent) return null;
 
@@ -191,6 +195,74 @@ export function EventDetailDrawer() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <FileCheck className="w-4 h-4 text-primary-500" />
+              整改状态
+            </h4>
+            {!rect ? (
+              <div className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
+                <span className="text-sm text-gray-400">暂未发起整改</span>
+                <button
+                  onClick={openRectificationModal}
+                  className="px-3 py-1.5 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                >
+                  生成整改
+                </button>
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <span className="text-sm text-gray-500">整改状态</span>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium ${getRectificationStatusColor(
+                      rect.status
+                    )}`}
+                  >
+                    {RECTIFICATION_STATUS_LABELS[rect.status]}
+                  </span>
+                </div>
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <span className="text-sm text-gray-500">整改类型</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {RECTIFICATION_TYPE_LABELS[rect.type]}
+                  </span>
+                </div>
+                <div className="p-4 border-b border-gray-100">
+                  <span className="text-sm text-gray-500 block mb-1.5">整改要求</span>
+                  <p className="text-sm text-gray-900 leading-relaxed">
+                    {rect.requirement}
+                  </p>
+                </div>
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <span className="text-sm text-gray-500">下发日期</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {formatDate(rect.createdAt)}
+                  </span>
+                </div>
+                <div className="p-4 flex items-center justify-between">
+                  <span className="text-sm text-gray-500">截止日期</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {formatDate(rect.deadline)}
+                  </span>
+                </div>
+                {rect.schoolReply && (
+                  <div className="p-4 bg-gray-50 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-gray-500">学校回复</span>
+                      <span className="text-xs text-gray-400">
+                        {formatDate(rect.replyDate || null)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-900 leading-relaxed">
+                      {rect.schoolReply}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-gray-50 rounded-xl p-4">

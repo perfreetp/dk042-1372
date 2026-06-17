@@ -8,6 +8,8 @@ import {
   FileEdit,
   ChevronRight,
   CheckCircle2,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { FilterBar } from '../../components/features/FilterBar';
@@ -19,11 +21,14 @@ import {
   formatTime,
   getRiskLevelBgClass,
   getRiskLevelColor,
+  getRectificationStatusColor,
 } from '../../utils';
 import {
   RISK_LEVEL_LABELS,
   FENCE_TYPE_LABELS,
   FenceEvent,
+  Rectification,
+  RECTIFICATION_STATUS_LABELS,
 } from '../../types';
 
 export function RiskInspectionPage() {
@@ -33,6 +38,11 @@ export function RiskInspectionPage() {
     openEventDetail,
     openRectificationModal,
     getStatistics,
+    selectedEventIds,
+    toggleEventSelection,
+    clearEventSelection,
+    openCreateTaskModal,
+    getRectificationByEventId,
   } = useAppStore();
 
   const [viewedEvents, setViewedEvents] = useState<Set<string>>(new Set());
@@ -119,9 +129,32 @@ export function RiskInspectionPage() {
                   按风险评分从高到低排序
                 </span>
               </h3>
-              <span className="text-xs text-gray-500">
-                共 {events.length} 条记录
-              </span>
+              <div className="flex items-center gap-3">
+                {selectedEventIds.length > 0 ? (
+                  <>
+                    <span className="text-sm text-primary-600 font-medium">
+                      已选择 {selectedEventIds.length} 条
+                    </span>
+                    <button
+                      onClick={openCreateTaskModal}
+                      className="btn-primary text-xs"
+                    >
+                      <FileEdit className="w-3.5 h-3.5 mr-1.5" />
+                      生成抽查任务
+                    </button>
+                    <button
+                      onClick={clearEventSelection}
+                      className="btn-secondary text-xs"
+                    >
+                      清空选择
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-500">
+                    共 {events.length} 条记录
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -129,15 +162,30 @@ export function RiskInspectionPage() {
             {events.length > 0 ? (
               events.map((event, index) => {
                 const isViewed = viewedEvents.has(event.id);
+                const isSelected = selectedEventIds.includes(event.id);
+                const rect = getRectificationByEventId(event.id);
 
                 return (
                   <div
                     key={event.id}
                     className={`p-5 hover:bg-gray-50 transition-all ${
                       isViewed ? 'opacity-75' : ''
+                    } ${
+                      isSelected ? 'bg-primary-50' : ''
                     }`}
                   >
                     <div className="flex items-start gap-5">
+                      <button
+                        onClick={() => toggleEventSelection(event.id)}
+                        className="flex-shrink-0 mt-1 text-gray-400 hover:text-primary-500 transition-colors"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-5 h-5 text-primary-500" />
+                        ) : (
+                          <Square className="w-5 h-5" />
+                        )}
+                      </button>
+
                       <div className="flex-shrink-0">
                         <div
                           className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg ${getRiskLevelColor(
@@ -151,7 +199,7 @@ export function RiskInspectionPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
+                            <div className="flex items-center gap-3 mb-2 flex-wrap">
                               <span
                                 className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getRiskLevelBgClass(
                                   event.riskLevel
@@ -169,6 +217,15 @@ export function RiskInspectionPage() {
                                 <span className="flex items-center gap-1 text-xs text-success-600">
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   已核查
+                                </span>
+                              )}
+                              {rect && (
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getRectificationStatusColor(
+                                    rect.status
+                                  )}`}
+                                >
+                                  {RECTIFICATION_STATUS_LABELS[rect.status]}
                                 </span>
                               )}
                             </div>

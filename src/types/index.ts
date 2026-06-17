@@ -80,6 +80,8 @@ export interface Rectification {
   id: string;
   schoolId: string;
   schoolName: string;
+  routeId: string;
+  routeName: string;
   eventId: string;
   eventDescription: string;
   type: RectificationType;
@@ -89,6 +91,46 @@ export interface Rectification {
   status: RectificationStatus;
   schoolReply?: string;
   replyDate?: Date;
+}
+
+export type InspectionTaskStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface InspectionTaskItem {
+  eventId: string;
+  event: FenceEvent;
+  checked: boolean;
+  conclusion?: string;
+  checkedAt?: Date;
+}
+
+export interface InspectionTask {
+  id: string;
+  name: string;
+  reason: string;
+  createdAt: Date;
+  status: InspectionTaskStatus;
+  items: InspectionTaskItem[];
+  createdBy: string;
+  completedAt?: Date;
+}
+
+export const INSPECTION_TASK_STATUS_LABELS: Record<InspectionTaskStatus, string> = {
+  pending: '待抽查',
+  in_progress: '抽查中',
+  completed: '已完成',
+};
+
+export interface DailyFenceSummary {
+  date: Date;
+  schoolId: string;
+  routeId: string;
+  routeName: string;
+  busCount: number;
+  schoolFenceCount: number;
+  pickupFenceCount: number;
+  dangerFenceCount: number;
+  abnormalCount: number;
+  riskTags: RiskTagType[];
 }
 
 export interface Filters {
@@ -102,13 +144,20 @@ export interface AppState {
   filters: Filters;
   schools: School[];
   fenceSummaries: FenceSummary[];
+  dailySummaries: DailyFenceSummary[];
   riskEvents: FenceEvent[];
   rectifications: Rectification[];
+  inspectionTasks: InspectionTask[];
   selectedEvent: FenceEvent | null;
+  selectedTaskId: string | null;
+  selectedEventIds: string[];
   ui: {
     isLoading: boolean;
     showRectificationModal: boolean;
     showEventDetail: boolean;
+    showCreateTaskModal: boolean;
+    showTaskDetailModal: boolean;
+    showLedgerModal: boolean;
   };
 }
 
@@ -125,7 +174,19 @@ export type AppAction =
     }
   | { type: 'TOGGLE_RECTIFICATION_MODAL'; payload: boolean }
   | { type: 'TOGGLE_EVENT_DETAIL'; payload: boolean }
-  | { type: 'SET_LOADING'; payload: boolean };
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'TOGGLE_EVENT_SELECTION'; payload: string }
+  | { type: 'CLEAR_EVENT_SELECTION'; payload: undefined }
+  | { type: 'SET_SELECTED_TASK'; payload: string | null }
+  | { type: 'CREATE_INSPECTION_TASK'; payload: InspectionTask }
+  | {
+      type: 'UPDATE_TASK_ITEM';
+      payload: { taskId: string; eventId: string; checked: boolean; conclusion?: string };
+    }
+  | { type: 'UPDATE_TASK_STATUS'; payload: { taskId: string; status: InspectionTaskStatus } }
+  | { type: 'TOGGLE_CREATE_TASK_MODAL'; payload: boolean }
+  | { type: 'TOGGLE_TASK_DETAIL_MODAL'; payload: boolean }
+  | { type: 'TOGGLE_LEDGER_MODAL'; payload: boolean };
 
 export const RISK_TAG_LABELS: Record<RiskTagType, string> = {
   frequent_detour: '频繁绕行',

@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ClipboardCheck,
   Bus,
+  ListChecks,
 } from 'lucide-react';
 
 const navItems = [
@@ -16,6 +17,11 @@ const navItems = [
     path: '/risk-inspection',
     label: '风险抽查',
     icon: AlertTriangle,
+  },
+  {
+    path: '/inspection-tasks',
+    label: '抽查任务',
+    icon: ListChecks,
   },
   {
     path: '/rectification',

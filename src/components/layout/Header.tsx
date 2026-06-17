@@ -1,4 +1,4 @@
-import { Bell, Search, Settings } from 'lucide-react';
+import { Bell, FileSpreadsheet, Search, Settings } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
 interface HeaderProps {
@@ -7,7 +7,7 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const { getStatistics } = useAppStore();
+  const { getStatistics, openLedgerModal } = useAppStore();
   const stats = getStatistics();
 
   return (
@@ -27,6 +27,14 @@ export function Header({ title, subtitle }: HeaderProps) {
               已超期 {stats.overdueRectifications}
             </span>
           </div>
+
+          <button
+            onClick={openLedgerModal}
+            className="btn-primary text-xs inline-flex items-center gap-1.5"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            监管台账
+          </button>
 
           <div className="relative">
             <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

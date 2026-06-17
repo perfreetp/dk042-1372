@@ -6,6 +6,9 @@ import {
   RiskTag,
   RiskLevel,
   RiskTagType,
+  DailyFenceSummary,
+  InspectionTask,
+  InspectionTaskStatus,
 } from '../types';
 
 const drivers = [
@@ -75,6 +78,39 @@ export const schools: School[] = [
   },
 ];
 
+const routeSchoolMap: Record<string, { schoolId: string; schoolName: string; routeName: string }> = {
+  r1: { schoolId: 's1', schoolName: '阳光镇中心小学', routeName: '阳光镇1号线' },
+  r2: { schoolId: 's1', schoolName: '阳光镇中心小学', routeName: '阳光镇2号线' },
+  r8: { schoolId: 's1', schoolName: '阳光镇中心小学', routeName: '阳光镇3号线' },
+  r19: { schoolId: 's1', schoolName: '阳光镇中心小学', routeName: '阳光镇4号线' },
+  r3: { schoolId: 's2', schoolName: '红星乡第一中学', routeName: '红星乡1号线' },
+  r7: { schoolId: 's2', schoolName: '红星乡第一中学', routeName: '红星乡2号线' },
+  r10: { schoolId: 's2', schoolName: '红星乡第一中学', routeName: '红星乡3号线' },
+  r20: { schoolId: 's2', schoolName: '红星乡第一中学', routeName: '红星乡4号线' },
+  r21: { schoolId: 's2', schoolName: '红星乡第一中学', routeName: '红星乡5号线' },
+  r22: { schoolId: 's2', schoolName: '红星乡第一中学', routeName: '红星乡6号线' },
+  r4: { schoolId: 's3', schoolName: '幸福村完全小学', routeName: '幸福村1号线' },
+  r11: { schoolId: 's3', schoolName: '幸福村完全小学', routeName: '幸福村2号线' },
+  r9: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇1号线' },
+  r12: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇2号线' },
+  r13: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇3号线' },
+  r14: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇4号线' },
+  r23: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇5号线' },
+  r24: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇6号线' },
+  r25: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇7号线' },
+  r26: { schoolId: 's4', schoolName: '前进镇实验学校', routeName: '前进镇8号线' },
+  r5: { schoolId: 's5', schoolName: '胜利乡第二小学', routeName: '胜利乡1号线' },
+  r15: { schoolId: 's5', schoolName: '胜利乡第二小学', routeName: '胜利乡2号线' },
+  r16: { schoolId: 's5', schoolName: '胜利乡第二小学', routeName: '胜利乡3号线' },
+  r6: { schoolId: 's6', schoolName: '光明镇中心幼儿园', routeName: '光明镇1号线' },
+  r17: { schoolId: 's6', schoolName: '光明镇中心幼儿园', routeName: '光明镇2号线' },
+  r18: { schoolId: 's6', schoolName: '光明镇中心幼儿园', routeName: '光明镇3号线' },
+};
+
+export function getSchoolInfoByRoute(routeId: string) {
+  return routeSchoolMap[routeId] || routeSchoolMap['r1'];
+}
+
 function createRiskTag(
   type: RiskTagType,
   level: RiskLevel
@@ -90,25 +126,124 @@ function createRiskTag(
   return { type, description: descriptions[type], level };
 }
 
+export const fenceSummaries: FenceSummary[] = Object.entries(routeSchoolMap).map(
+  ([routeId, info]) => {
+    const riskMap: Record<string, RiskTagType[]> = {
+      r1: ['frequent_detour', 'off_site_boarding'],
+      r2: ['missing_entry'],
+      r3: ['night_movement'],
+      r4: ['long_stay', 'missing_entry'],
+      r5: ['missing_exit', 'off_site_boarding'],
+      r6: ['frequent_detour'],
+      r7: [],
+      r8: [],
+      r9: [],
+      r10: [],
+      r11: [],
+      r12: [],
+      r13: [],
+      r14: [],
+      r15: [],
+      r16: [],
+      r17: [],
+      r18: [],
+      r19: [],
+      r20: [],
+      r21: [],
+      r22: [],
+      r23: [],
+      r24: [],
+      r25: [],
+      r26: [],
+    };
+    const abnormalMap: Record<string, number> = {
+      r1: 8, r2: 5, r3: 6, r4: 4, r5: 6, r6: 5, r7: 2, r8: 0,
+      r9: 0, r10: 0, r11: 1, r12: 0, r13: 0, r14: 0, r15: 2, r16: 0,
+      r17: 0, r18: 0, r19: 0, r20: 0, r21: 0, r22: 0, r23: 0, r24: 0,
+      r25: 0, r26: 0,
+    };
+    const busCountMap: Record<string, number> = {
+      r1: 2, r2: 2, r3: 3, r4: 2, r5: 2, r6: 2, r7: 3, r8: 2,
+      r9: 3, r10: 2, r11: 1, r12: 3, r13: 2, r14: 2, r15: 2, r16: 1,
+      r17: 1, r18: 1, r19: 2, r20: 1, r21: 1, r22: 1, r23: 1, r24: 2,
+      r25: 2, r26: 2,
+    };
+    const tags = riskMap[routeId] || [];
+    const abnormal = abnormalMap[routeId] || 0;
+    const baseSchool = Math.floor(Math.random() * 10) + 20;
+    const basePickup = Math.floor(Math.random() * 20) + 35;
+    const baseDanger = tags.length > 0 ? Math.floor(Math.random() * 4) + 1 : 0;
+
+    return {
+      schoolId: info.schoolId,
+      routeId,
+      routeName: info.routeName,
+      busCount: busCountMap[routeId] || 2,
+      schoolFenceCount: baseSchool,
+      pickupFenceCount: basePickup,
+      dangerFenceCount: baseDanger,
+      abnormalCount: abnormal,
+      riskTags: tags,
+    };
+  }
+);
+
+function generateDailySummaries(): DailyFenceSummary[] {
+  const result: DailyFenceSummary[] = [];
+  const now = new Date();
+
+  for (let dayOffset = 0; dayOffset < 30; dayOffset++) {
+    const date = new Date(now.getTime() - dayOffset * 24 * 60 * 60 * 1000);
+
+    for (const summary of fenceSummaries) {
+      const factor = dayOffset <= 7 ? 1 : dayOffset <= 15 ? 0.9 : 0.8;
+      const hasAbnormal = summary.abnormalCount > 0;
+      const abnormalChance = dayOffset <= 7 ? (hasAbnormal ? 0.7 : 0.2) : hasAbnormal ? 0.4 : 0.1;
+      const hasAbnormalToday = Math.random() < abnormalChance;
+
+      result.push({
+        date,
+        schoolId: summary.schoolId,
+        routeId: summary.routeId,
+        routeName: summary.routeName,
+        busCount: summary.busCount,
+        schoolFenceCount: Math.round(summary.schoolFenceCount / 7 * factor),
+        pickupFenceCount: Math.round(summary.pickupFenceCount / 7 * factor),
+        dangerFenceCount: Math.random() < 0.3 ? (summary.dangerFenceCount > 0 ? 1 : 0) : 0,
+        abnormalCount: hasAbnormalToday ? Math.ceil(Math.random() * 3) : 0,
+        riskTags: hasAbnormalToday ? summary.riskTags.slice(0, Math.ceil(Math.random() * summary.riskTags.length)) : [],
+      });
+    }
+  }
+
+  return result;
+}
+
+export const dailySummaries: DailyFenceSummary[] = generateDailySummaries();
+
 function createEvent(
   id: string,
-  schoolId: string,
-  busPlate: string,
   routeId: string,
-  routeName: string,
+  busPlate: string,
   fenceType: 'school' | 'pickup' | 'danger',
   fenceName: string,
   eventType: 'entry' | 'exit' | 'missed' | 'detour',
-  entryTime: Date,
-  exitTime: Date | null,
+  daysAgo: number,
+  hour: number,
+  durationMin: number,
   riskTags: { type: RiskTagType; level: RiskLevel }[],
   baseScore: number
 ): FenceEvent {
+  const routeInfo = routeSchoolMap[routeId] || routeSchoolMap['r1'];
   const driver = drivers[Math.floor(Math.random() * drivers.length)];
   const attendant = attendants[Math.floor(Math.random() * attendants.length)];
-  const durationMin = exitTime
-    ? Math.round((exitTime.getTime() - entryTime.getTime()) / 60000)
-    : 0;
+
+  const now = new Date();
+  const entryTime = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+  entryTime.setHours(hour, Math.floor(Math.random() * 60), 0, 0);
+  const exitTime = durationMin > 0
+    ? new Date(entryTime.getTime() + durationMin * 60 * 1000)
+    : null;
 
   const tagBonus = riskTags.reduce((sum, tag) => {
     const bonuses: Record<RiskTagType, number> = {
@@ -122,9 +257,7 @@ function createEvent(
     return sum + bonuses[tag.type];
   }, 0);
 
-  const daysDiff =
-    (Date.now() - entryTime.getTime()) / (1000 * 60 * 60 * 24);
-  const timeWeight = daysDiff <= 3 ? 1.5 : daysDiff <= 7 ? 1.2 : 1.0;
+  const timeWeight = daysAgo <= 3 ? 1.5 : daysAgo <= 7 ? 1.2 : 1.0;
   const riskScore = Math.min(100, Math.round((baseScore + tagBonus) * timeWeight));
 
   const riskLevel: RiskLevel =
@@ -141,7 +274,7 @@ function createEvent(
     busId: `bus${id}`,
     busPlate,
     routeId,
-    routeName,
+    routeName: routeInfo.routeName,
     fenceType,
     fenceName,
     eventType,
@@ -156,363 +289,48 @@ function createEvent(
   };
 }
 
-const now = new Date();
-
 export const fenceEvents: FenceEvent[] = [
-  createEvent(
-    'e1',
-    's1',
-    '皖A·12345',
-    'r1',
-    '阳光镇1号线',
-    'pickup',
-    '李家村接送点',
-    'detour',
-    new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000),
-    new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000 - 1 * 60 * 60 * 1000),
-    [
-      { type: 'frequent_detour', level: 'high' },
-      { type: 'off_site_boarding', level: 'critical' },
-    ],
-    30
-  ),
-  createEvent(
-    'e2',
-    's1',
-    '皖A·12346',
-    'r2',
-    '阳光镇2号线',
-    'school',
-    '学校正门围栏',
-    'missed',
-    new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000 - 7 * 60 * 60 * 1000),
-    null,
-    [{ type: 'missing_entry', level: 'high' }],
-    40
-  ),
-  createEvent(
-    'e3',
-    's2',
-    '皖A·12347',
-    'r3',
-    '红星乡1号线',
-    'danger',
-    'S206省道危险段',
-    'entry',
-    new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000 - 23 * 60 * 60 * 1000),
-    new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000 - 22 * 60 * 60 * 1000),
-    [{ type: 'night_movement', level: 'critical' }],
-    50
-  ),
-  createEvent(
-    'e4',
-    's3',
-    '皖A·12348',
-    'r4',
-    '幸福村1号线',
-    'pickup',
-    '幸福村广场',
-    'entry',
-    new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000 - 8 * 60 * 60 * 1000),
-    new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000 - 7 * 60 * 60 * 1000),
-    [{ type: 'long_stay', level: 'medium' }],
-    30
-  ),
-  createEvent(
-    'e5',
-    's1',
-    '皖A·12345',
-    'r1',
-    '阳光镇1号线',
-    'school',
-    '学校东门围栏',
-    'missed',
-    new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000 - 16 * 60 * 60 * 1000),
-    null,
-    [{ type: 'missing_exit', level: 'high' }],
-    40
-  ),
-  createEvent(
-    'e6',
-    's5',
-    '皖A·12349',
-    'r5',
-    '胜利乡1号线',
-    'pickup',
-    '胜利乡政府门口',
-    'detour',
-    new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000 - 6 * 60 * 60 * 1000),
-    new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000 - 5 * 60 * 60 * 1000),
-    [
-      { type: 'off_site_boarding', level: 'high' },
-      { type: 'frequent_detour', level: 'medium' },
-    ],
-    30
-  ),
-  createEvent(
-    'e7',
-    's6',
-    '皖A·12350',
-    'r6',
-    '光明镇1号线',
-    'pickup',
-    '光明镇文化站',
-    'detour',
-    new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000 - 7 * 60 * 60 * 1000),
-    new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000 - 6 * 60 * 60 * 1000),
-    [{ type: 'frequent_detour', level: 'high' }],
-    30
-  ),
-  createEvent(
-    'e8',
-    's2',
-    '皖A·12351',
-    'r7',
-    '红星乡2号线',
-    'danger',
-    '老桥危险路段',
-    'entry',
-    new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000 - 18 * 60 * 60 * 1000),
-    new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000 - 17 * 60 * 60 * 1000),
-    [],
-    50
-  ),
-  createEvent(
-    'e9',
-    's1',
-    '皖A·12352',
-    'r8',
-    '阳光镇3号线',
-    'school',
-    '学校北门围栏',
-    'entry',
-    new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000 - 7 * 30 * 60 * 1000),
-    new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000 - 7 * 20 * 60 * 1000),
-    [],
-    0
-  ),
-  createEvent(
-    'e10',
-    's4',
-    '皖A·12353',
-    'r9',
-    '前进镇1号线',
-    'pickup',
-    '前进镇汽车站',
-    'entry',
-    new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000 - 7 * 60 * 60 * 1000),
-    new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000 - 6 * 50 * 60 * 1000),
-    [],
-    0
-  ),
+  createEvent('e1', 'r1', '皖A·12345', 'pickup', '李家村接送点', 'detour', 1, 8, 60,
+    [{ type: 'frequent_detour', level: 'high' }, { type: 'off_site_boarding', level: 'critical' }], 30),
+  createEvent('e2', 'r2', '皖A·12346', 'school', '学校正门围栏', 'missed', 2, 7, 0,
+    [{ type: 'missing_entry', level: 'high' }], 40),
+  createEvent('e3', 'r3', '皖A·12347', 'danger', 'S206省道危险段', 'entry', 3, 23, 60,
+    [{ type: 'night_movement', level: 'critical' }], 50),
+  createEvent('e4', 'r4', '皖A·12348', 'pickup', '幸福村广场', 'entry', 5, 8, 65,
+    [{ type: 'long_stay', level: 'medium' }], 30),
+  createEvent('e5', 'r1', '皖A·12345', 'school', '学校东门围栏', 'missed', 1, 16, 0,
+    [{ type: 'missing_exit', level: 'high' }], 40),
+  createEvent('e6', 'r5', '皖A·12349', 'pickup', '胜利乡政府门口', 'detour', 4, 6, 60,
+    [{ type: 'off_site_boarding', level: 'high' }, { type: 'frequent_detour', level: 'medium' }], 30),
+  createEvent('e7', 'r6', '皖A·12350', 'pickup', '光明镇文化站', 'detour', 6, 7, 55,
+    [{ type: 'frequent_detour', level: 'high' }], 30),
+  createEvent('e8', 'r7', '皖A·12351', 'danger', '老桥危险路段', 'entry', 10, 18, 60,
+    [], 50),
+  createEvent('e9', 'r8', '皖A·12352', 'school', '学校北门围栏', 'entry', 8, 7, 10,
+    [], 0),
+  createEvent('e10', 'r9', '皖A·12353', 'pickup', '前进镇汽车站', 'entry', 2, 7, 10,
+    [], 0),
+  createEvent('e11', 'r1', '皖A·12345', 'pickup', '王家村路口', 'detour', 10, 7, 45,
+    [{ type: 'frequent_detour', level: 'medium' }], 30),
+  createEvent('e12', 'r3', '皖A·12354', 'school', '学校南门围栏', 'missed', 12, 7, 0,
+    [{ type: 'missing_entry', level: 'medium' }], 40),
+  createEvent('e13', 'r19', '皖A·12355', 'pickup', '阳光镇卫生院', 'entry', 15, 7, 40,
+    [{ type: 'long_stay', level: 'low' }], 30),
+  createEvent('e14', 'r20', '皖A·12356', 'danger', '红星乡急弯段', 'entry', 20, 17, 30,
+    [], 50),
+  createEvent('e15', 'r5', '皖A·12349', 'school', '学校正门围栏', 'missed', 25, 7, 0,
+    [{ type: 'missing_entry', level: 'medium' }], 40),
 ];
 
-export const fenceSummaries: FenceSummary[] = [
-  {
-    schoolId: 's1',
-    routeId: 'r1',
-    routeName: '阳光镇1号线',
-    busCount: 2,
-    schoolFenceCount: 28,
-    pickupFenceCount: 56,
-    dangerFenceCount: 3,
-    abnormalCount: 8,
-    riskTags: ['frequent_detour', 'off_site_boarding'],
-  },
-  {
-    schoolId: 's1',
-    routeId: 'r2',
-    routeName: '阳光镇2号线',
-    busCount: 2,
-    schoolFenceCount: 26,
-    pickupFenceCount: 48,
-    dangerFenceCount: 1,
-    abnormalCount: 5,
-    riskTags: ['missing_entry'],
-  },
-  {
-    schoolId: 's1',
-    routeId: 'r8',
-    routeName: '阳光镇3号线',
-    busCount: 2,
-    schoolFenceCount: 30,
-    pickupFenceCount: 52,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's2',
-    routeId: 'r3',
-    routeName: '红星乡1号线',
-    busCount: 3,
-    schoolFenceCount: 42,
-    pickupFenceCount: 78,
-    dangerFenceCount: 5,
-    abnormalCount: 6,
-    riskTags: ['night_movement'],
-  },
-  {
-    schoolId: 's2',
-    routeId: 'r7',
-    routeName: '红星乡2号线',
-    busCount: 3,
-    schoolFenceCount: 38,
-    pickupFenceCount: 65,
-    dangerFenceCount: 4,
-    abnormalCount: 2,
-    riskTags: [],
-  },
-  {
-    schoolId: 's2',
-    routeId: 'r10',
-    routeName: '红星乡3号线',
-    busCount: 2,
-    schoolFenceCount: 28,
-    pickupFenceCount: 45,
-    dangerFenceCount: 2,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's3',
-    routeId: 'r4',
-    routeName: '幸福村1号线',
-    busCount: 2,
-    schoolFenceCount: 22,
-    pickupFenceCount: 38,
-    dangerFenceCount: 1,
-    abnormalCount: 4,
-    riskTags: ['long_stay', 'missing_entry'],
-  },
-  {
-    schoolId: 's3',
-    routeId: 'r11',
-    routeName: '幸福村2号线',
-    busCount: 1,
-    schoolFenceCount: 12,
-    pickupFenceCount: 20,
-    dangerFenceCount: 0,
-    abnormalCount: 1,
-    riskTags: [],
-  },
-  {
-    schoolId: 's4',
-    routeId: 'r9',
-    routeName: '前进镇1号线',
-    busCount: 3,
-    schoolFenceCount: 45,
-    pickupFenceCount: 85,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's4',
-    routeId: 'r12',
-    routeName: '前进镇2号线',
-    busCount: 3,
-    schoolFenceCount: 42,
-    pickupFenceCount: 78,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's4',
-    routeId: 'r13',
-    routeName: '前进镇3号线',
-    busCount: 2,
-    schoolFenceCount: 30,
-    pickupFenceCount: 55,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's4',
-    routeId: 'r14',
-    routeName: '前进镇4号线',
-    busCount: 2,
-    schoolFenceCount: 28,
-    pickupFenceCount: 50,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's5',
-    routeId: 'r5',
-    routeName: '胜利乡1号线',
-    busCount: 2,
-    schoolFenceCount: 26,
-    pickupFenceCount: 48,
-    dangerFenceCount: 2,
-    abnormalCount: 6,
-    riskTags: ['missing_exit', 'off_site_boarding'],
-  },
-  {
-    schoolId: 's5',
-    routeId: 'r15',
-    routeName: '胜利乡2号线',
-    busCount: 2,
-    schoolFenceCount: 24,
-    pickupFenceCount: 42,
-    dangerFenceCount: 1,
-    abnormalCount: 2,
-    riskTags: [],
-  },
-  {
-    schoolId: 's5',
-    routeId: 'r16',
-    routeName: '胜利乡3号线',
-    busCount: 1,
-    schoolFenceCount: 12,
-    pickupFenceCount: 22,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's6',
-    routeId: 'r6',
-    routeName: '光明镇1号线',
-    busCount: 2,
-    schoolFenceCount: 28,
-    pickupFenceCount: 52,
-    dangerFenceCount: 0,
-    abnormalCount: 5,
-    riskTags: ['frequent_detour'],
-  },
-  {
-    schoolId: 's6',
-    routeId: 'r17',
-    routeName: '光明镇2号线',
-    busCount: 1,
-    schoolFenceCount: 14,
-    pickupFenceCount: 26,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-  {
-    schoolId: 's6',
-    routeId: 'r18',
-    routeName: '光明镇3号线',
-    busCount: 1,
-    schoolFenceCount: 12,
-    pickupFenceCount: 24,
-    dangerFenceCount: 0,
-    abnormalCount: 0,
-    riskTags: [],
-  },
-];
+const now = new Date();
 
 export const rectifications: Rectification[] = [
   {
     id: 'rect1',
     schoolId: 's1',
     schoolName: '阳光镇中心小学',
+    routeId: 'r1',
+    routeName: '阳光镇1号线',
     eventId: 'e1',
     eventDescription: '皖A·12345在李家村接送点附近频繁绕行并站点外上下车',
     type: 'explain',
@@ -526,6 +344,8 @@ export const rectifications: Rectification[] = [
     id: 'rect2',
     schoolId: 's2',
     schoolName: '红星乡第一中学',
+    routeId: 'r3',
+    routeName: '红星乡1号线',
     eventId: 'e3',
     eventDescription: '皖A·12347于夜间23点进入S206省道危险路段',
     type: 'explain',
@@ -539,6 +359,8 @@ export const rectifications: Rectification[] = [
     id: 'rect3',
     schoolId: 's3',
     schoolName: '幸福村完全小学',
+    routeId: 'r4',
+    routeName: '幸福村1号线',
     eventId: 'e4',
     eventDescription: '皖A·12348在幸福村广场停留超过60分钟',
     type: 'supplement_record',
@@ -555,6 +377,8 @@ export const rectifications: Rectification[] = [
     id: 'rect4',
     schoolId: 's5',
     schoolName: '胜利乡第二小学',
+    routeId: 'r5',
+    routeName: '胜利乡1号线',
     eventId: 'e6',
     eventDescription: '皖A·12349在胜利乡政府门口站点外上下学生',
     type: 'revalidate_site',
@@ -568,6 +392,8 @@ export const rectifications: Rectification[] = [
     id: 'rect5',
     schoolId: 's1',
     schoolName: '阳光镇中心小学',
+    routeId: 'r2',
+    routeName: '阳光镇2号线',
     eventId: 'e2',
     eventDescription: '皖A·12346未按规定进入学校正门围栏',
     type: 'explain',
@@ -584,6 +410,8 @@ export const rectifications: Rectification[] = [
     id: 'rect6',
     schoolId: 's6',
     schoolName: '光明镇中心幼儿园',
+    routeId: 'r6',
+    routeName: '光明镇1号线',
     eventId: 'e7',
     eventDescription: '皖A·12350在光明镇文化站附近频繁绕行',
     type: 'revalidate_site',
@@ -592,5 +420,53 @@ export const rectifications: Rectification[] = [
     createdAt: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000),
     deadline: new Date(now.getTime() + 9 * 24 * 60 * 60 * 1000),
     status: 'pending',
+  },
+];
+
+export const inspectionTasks: InspectionTask[] = [
+  {
+    id: 'task1',
+    name: '6月第三周高风险事件专项抽查',
+    reason: '本周夜间异常移动和站点外上下车风险事件集中，需重点抽查核实。',
+    createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+    status: 'in_progress' as InspectionTaskStatus,
+    createdBy: '王科长',
+    items: [
+      {
+        eventId: 'e1',
+        event: fenceEvents.find(e => e.id === 'e1')!,
+        checked: true,
+        conclusion: '经核实，确因道路施工临时绕行，已督促学校优化线路。',
+        checkedAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000),
+      },
+      {
+        eventId: 'e3',
+        event: fenceEvents.find(e => e.id === 'e3')!,
+        checked: false,
+      },
+      {
+        eventId: 'e5',
+        event: fenceEvents.find(e => e.id === 'e5')!,
+        checked: false,
+      },
+    ],
+  },
+  {
+    id: 'task2',
+    name: '阳光镇中心小学围栏执行例行抽查',
+    reason: '月度例行抽查，覆盖阳光镇中心小学所有线路。',
+    createdAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000),
+    status: 'completed' as InspectionTaskStatus,
+    createdBy: '王科长',
+    completedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+    items: [
+      {
+        eventId: 'e2',
+        event: fenceEvents.find(e => e.id === 'e2')!,
+        checked: true,
+        conclusion: '学校正门施工，情况属实，已要求学校提交路线变更备案。',
+        checkedAt: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000),
+      },
+    ],
   },
 ];
