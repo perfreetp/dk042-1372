@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   ListCheck,
   Clock,
@@ -9,6 +10,7 @@ import {
   Calendar,
   Building2,
   Plus,
+  AlertCircle,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useAppStore } from '../../store/useAppStore';
@@ -53,6 +55,7 @@ export function InspectionTasksPage() {
     setSelectedTask,
     openTaskDetailModal,
     getTaskCompletionRate,
+    getTaskUrgencyInfo,
   } = useAppStore();
 
   const tasks = getFilteredTasks();
@@ -62,6 +65,8 @@ export function InspectionTasksPage() {
   const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
   const overdueCount = tasks.filter((t) => t.status !== 'completed' && getDaysRemaining(t.deadline) < 0).length;
+  const approachingCount = tasks.filter((t) => t.status !== 'completed' && getTaskUrgencyInfo(t.id).level === 'approaching').length;
+  const longPendingCount = tasks.filter((t) => t.status !== 'completed' && getTaskUrgencyInfo(t.id).level === 'long_pending').length;
 
   const handleStartInspection = (taskId: string) => {
     updateTaskStatus(taskId, 'in_progress');
@@ -96,7 +101,7 @@ export function InspectionTasksPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-5 gap-6 mb-8">
+        <div className="grid grid-cols-7 gap-6 mb-8">
           <div className="card p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -166,6 +171,36 @@ export function InspectionTasksPage() {
               </div>
             </div>
           </div>
+
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">临近截止</p>
+                <p className="text-3xl font-bold text-orange-600">
+                  {approachingCount}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">3天内到期</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center">
+                <Clock className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">长期搁置</p>
+                <p className="text-3xl font-bold text-purple-600">
+                  {longPendingCount}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">超10天未结</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="card">
@@ -192,20 +227,141 @@ export function InspectionTasksPage() {
                 const summaryText = task.summary && task.summary.length > 30
                   ? task.summary.substring(0, 30) + '...'
                   : task.summary;
+                const urgencyInfo = isCompleted ? null : getTaskUrgencyInfo(task.id);
+                const urgencyLevel = urgencyInfo?.level || 'normal';
+                const isOverdueUrgent = urgencyLevel === 'overdue';
+                const isApproaching = urgencyLevel === 'approaching';
+                const isLongPending = urgencyLevel === 'long_pending';
+
+                const taskCardBorderClass = isOverdueUrgent
+                  ? 'border-l-4 border-l-red-500'
+                  : isApproaching
+                  ? 'border-l-[3px] border-l-orange-500'
+                  : isLongPending
+                  ? 'border-l-[3px] border-l-purple-500'
+                  : '';
+
+                const total = task.items.length;
+                const checkedWithConclusion = task.items.filter(
+                  (i) => i.checked && i.conclusion && i.conclusion.trim().length > 0
+                ).length;
+                const completionRatePercent = total > 0 ? Math.round((checkedWithConclusion / total) * 100) : 0;
+
+                let statusBadgeNode: React.ReactNode;
+                if (isOverdueUrgent && urgencyInfo) {
+                  statusBadgeNode = (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500 text-white">
+                      已超期{Math.abs(urgencyInfo.daysToDeadline)}天
+                    </span>
+                  );
+                } else if (isLongPending) {
+                  statusBadgeNode = (
+                    <span className="relative inline-flex items-center">
+                      <span className={getTaskStatusColor(task.status)}>
+                        {INSPECTION_TASK_STATUS_LABELS[task.status]}
+                      </span>
+                      <span className="ml-1 text-xs text-purple-600 font-medium">(搁置)</span>
+                    </span>
+                  );
+                } else if (isApproaching) {
+                  statusBadgeNode = (
+                    <span className="relative inline-flex items-center">
+                      <span className={getTaskStatusColor(task.status)}>
+                        {INSPECTION_TASK_STATUS_LABELS[task.status]}
+                      </span>
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-500"></span>
+                    </span>
+                  );
+                } else {
+                  statusBadgeNode = (
+                    <span className={getTaskStatusColor(task.status)}>
+                      {INSPECTION_TASK_STATUS_LABELS[task.status]}
+                    </span>
+                  );
+                }
+
+                let urgencyDetailNode: React.ReactNode = null;
+                if (!isCompleted && urgencyInfo && urgencyLevel !== 'normal') {
+                  if (urgencyLevel === 'overdue') {
+                    urgencyDetailNode = (
+                      <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-red-600">
+                        ⚠️ 已超期 {Math.abs(urgencyInfo.daysToDeadline)} 天 — 催办人：{urgencyInfo.assignee} | 未核查{urgencyInfo.uncheckedCount}条，缺结论{urgencyInfo.noConclusionCount}条
+                      </div>
+                    );
+                  } else if (urgencyLevel === 'approaching') {
+                    urgencyDetailNode = (
+                      <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-orange-600">
+                        ⏰ 还有 {urgencyInfo.daysToDeadline} 天到期 — 抽查人：{urgencyInfo.assignee} | 未核查{urgencyInfo.uncheckedCount}条，缺结论{urgencyInfo.noConclusionCount}条
+                      </div>
+                    );
+                  } else if (urgencyLevel === 'long_pending') {
+                    urgencyDetailNode = (
+                      <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-purple-600">
+                        📋 超期搁置 — 完成率仅 {completionRatePercent}% | 未核查{urgencyInfo.uncheckedCount}条，缺结论{urgencyInfo.noConclusionCount}条
+                      </div>
+                    );
+                  }
+                }
+
+                let startButtonNode: React.ReactNode = null;
+                if (task.status === 'pending') {
+                  if (isOverdueUrgent) {
+                    startButtonNode = (
+                      <button
+                        onClick={() => handleStartInspection(task.id)}
+                        className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-700 text-white hover:bg-red-800 font-medium"
+                      >
+                        <PlayCircle className="w-3.5 h-3.5" />
+                        立即催办+抽查
+                      </button>
+                    );
+                  } else if (isLongPending) {
+                    startButtonNode = (
+                      <button
+                        onClick={() => handleStartInspection(task.id)}
+                        className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-600 text-white hover:bg-purple-700 font-medium"
+                      >
+                        <PlayCircle className="w-3.5 h-3.5" />
+                        跟进催办
+                      </button>
+                    );
+                  } else if (isApproaching) {
+                    startButtonNode = (
+                      <button
+                        onClick={() => handleStartInspection(task.id)}
+                        className="btn-primary text-xs flex items-center gap-1.5"
+                      >
+                        <span className="relative inline-flex items-center">
+                          <PlayCircle className="w-3.5 h-3.5" />
+                          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                        </span>
+                        开始抽查
+                      </button>
+                    );
+                  } else {
+                    startButtonNode = (
+                      <button
+                        onClick={() => handleStartInspection(task.id)}
+                        className="btn-primary text-xs flex items-center gap-1.5"
+                      >
+                        <PlayCircle className="w-3.5 h-3.5" />
+                        开始抽查
+                      </button>
+                    );
+                  }
+                }
 
                 return (
                   <div
                     key={task.id}
-                    className={`p-5 transition-all ${
+                    className={`p-5 transition-all ${taskCardBorderClass} ${
                       isCompleted ? 'opacity-60 bg-gray-50' : 'hover:bg-gray-50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-3">
-                          <span className={getTaskStatusColor(task.status)}>
-                            {INSPECTION_TASK_STATUS_LABELS[task.status]}
-                          </span>
+                          {statusBadgeNode}
                           <h4 className="text-base font-semibold text-gray-900 truncate">
                             {task.name}
                           </h4>
@@ -250,6 +406,8 @@ export function InspectionTasksPage() {
                           </div>
                         )}
 
+                        {urgencyDetailNode}
+
                         {isCompleted && task.completedAt && (
                           <div className="bg-green-50 rounded-lg p-3 text-sm">
                             <div className="flex items-center gap-1.5 text-green-700 mb-1">
@@ -266,15 +424,7 @@ export function InspectionTasksPage() {
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {task.status === 'pending' && (
-                          <button
-                            onClick={() => handleStartInspection(task.id)}
-                            className="btn-primary text-xs flex items-center gap-1.5"
-                          >
-                            <PlayCircle className="w-3.5 h-3.5" />
-                            开始抽查
-                          </button>
-                        )}
+                        {startButtonNode}
                         <button
                           onClick={() => handleViewDetail(task.id)}
                           className="btn-secondary text-xs flex items-center gap-1.5"

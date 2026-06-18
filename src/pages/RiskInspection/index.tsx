@@ -148,17 +148,18 @@ export function RiskInspectionPage() {
                 </span>
               </h3>
               <div className="flex items-center gap-3">
-                {selectedEventIds.length > 0 ? (
+                {selectedCount > 0 ? (
                   <>
                     <span className="text-sm text-primary-600 font-medium">
-                      已选择 {selectedEventIds.length} 条
+                      已选择 {selectedCount} 条
                     </span>
                     <button
                       onClick={openCreateTaskModal}
-                      className="btn-primary text-xs"
+                      disabled={selectedCount === 0}
+                      className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <FileEdit className="w-3.5 h-3.5 mr-1.5" />
-                      生成抽查任务
+                      生成抽查任务（{selectedCount}件）
                     </button>
                     <button
                       onClick={clearEventSelection}
@@ -174,6 +175,11 @@ export function RiskInspectionPage() {
                 )}
               </div>
             </div>
+            {selectedEventIds.length > selectedCount && (
+              <div className="mt-3 text-xs text-gray-400">
+                提示：有 {selectedEventIds.length - selectedCount} 条勾选的事件不在当前筛选列表中，生成任务时不会包含
+              </div>
+            )}
           </div>
 
           <div className="divide-y divide-gray-100">

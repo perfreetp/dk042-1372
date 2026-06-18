@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, CheckCircle, Clock, User, FileText, Calendar } from 'lucide-react';
+import { X, CheckCircle, Clock, User, FileText, Calendar, AlertCircle, Bell, AlertTriangle } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { formatDate, formatDateTime, getRiskLevelBgClass } from '../../utils';
 import {
@@ -19,6 +19,7 @@ export function TaskDetailModal() {
     updateTaskItem,
     updateTaskStatus,
     getTaskCompletionRate,
+    getTaskUrgencyInfo,
     addReviewedEvent,
   } = useAppStore();
 
@@ -32,6 +33,7 @@ export function TaskDetailModal() {
 
   const completionRate = getTaskCompletionRate(task.id);
   const canComplete = completionRate.canComplete;
+  const urgency = task.status !== 'completed' ? getTaskUrgencyInfo(task.id) : null;
 
   const hasConclusion = (item: typeof task.items[0]) => {
     return item.checked && item.conclusion && item.conclusion.trim().length > 0;
@@ -151,6 +153,79 @@ export function TaskDetailModal() {
             <span className="text-gray-500 flex-shrink-0">抽查理由：</span>
             <span className="text-gray-900">{task.reason}</span>
           </div>
+          {urgency && urgency.level !== 'normal' && (
+            <div className={`mt-4 rounded-lg p-4 ${
+              urgency.level === 'overdue' ? 'bg-danger-50 border border-danger-200' :
+              urgency.level === 'approaching' ? 'bg-warning-50 border border-warning-200' :
+              'bg-purple-50 border border-purple-200'
+            }`}>
+              <div className="flex items-start gap-3">
+                {urgency.level === 'overdue' && (
+                  <AlertCircle className="w-5 h-5 text-danger-600 flex-shrink-0 mt-0.5" />
+                )}
+                {urgency.level === 'approaching' && (
+                  <Bell className="w-5 h-5 text-warning-600 flex-shrink-0 mt-0.5" />
+                )}
+                {urgency.level === 'long_pending' && (
+                  <AlertTriangle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1 text-sm">
+                  {urgency.level === 'overdue' && (
+                    <>
+                      <p className="font-semibold text-danger-700 mb-1">
+                        ⚠️ 已超期 {Math.abs(urgency.daysToDeadline)} 天
+                      </p>
+                      <p className="text-danger-700/90">
+                        立即催办抽查人 <strong>{urgency.assignee}</strong>，
+                        未核查 <strong>{urgency.uncheckedCount}</strong> 条，
+                        缺结论 <strong>{urgency.noConclusionCount}</strong> 条
+                      </p>
+                    </>
+                  )}
+                  {urgency.level === 'approaching' && (
+                    <>
+                      <p className="font-semibold text-warning-700 mb-1">
+                        ⏰ 还有 {urgency.daysToDeadline} 天到期
+                      </p>
+                      <p className="text-warning-700/90">
+                        抽查人 <strong>{urgency.assignee}</strong>，
+                        未核查 <strong>{urgency.uncheckedCount}</strong> 条，
+                        缺结论 <strong>{urgency.noConclusionCount}</strong> 条
+                      </p>
+                    </>
+                  )}
+                  {urgency.level === 'long_pending' && (
+                    <>
+                      <p className="font-semibold text-purple-700 mb-1">
+                        📋 任务创建超 {urgency.daysSinceCreated} 天，完成率仅 {completionRate.rate}%
+                      </p>
+                      <p className="text-purple-700/90">
+                        请跟进抽查人 <strong>{urgency.assignee}</strong>，
+                        未核查 <strong>{urgency.uncheckedCount}</strong> 条，
+                        缺结论 <strong>{urgency.noConclusionCount}</strong> 条
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+              {(urgency.uncheckedCount > 0 || urgency.noConclusionCount > 0) && (
+                <div className="mt-3 pt-3 border-t border-dashed border-gray-200/80 space-y-1">
+                  {urgency.uncheckedEvents.map((ev) => (
+                    <div key={ev.eventId} className="text-xs text-gray-600 flex items-center gap-2">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-danger-400"></span>
+                      未核查：{ev.busPlate} | {ev.routeName} | {ev.fenceName}
+                    </div>
+                  ))}
+                  {urgency.noConclusionEvents.map((ev) => (
+                    <div key={ev.eventId} className="text-xs text-gray-600 flex items-center gap-2">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-warning-400"></span>
+                      缺结论：{ev.busPlate} | {ev.routeName} | {ev.fenceName}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">

@@ -17,6 +17,8 @@ import {
   RECTIFICATION_STATUS_LABELS,
   RECTIFICATION_TYPE_LABELS,
   INSPECTION_TASK_STATUS_LABELS,
+  FENCE_TYPE_LABELS,
+  RISK_LEVEL_LABELS,
 } from '../types';
 import {
   schools,
@@ -335,6 +337,8 @@ function appReducer(
   return newState;
 }
 
+type TaskUrgencyLevel = 'normal' | 'approaching' | 'overdue' | 'long_pending';
+
 interface DashboardSchoolStats {
   schoolId: string;
   schoolName: string;
@@ -345,6 +349,32 @@ interface DashboardSchoolStats {
   pendingTasks: number;
   inProgressTasks: number;
   completedTasks: number;
+  approachingTasks: number;
+  overdueTasks: number;
+  longPendingTasks: number;
+}
+
+interface TaskUrgencyInfo {
+  taskId: string;
+  taskName: string;
+  assignee: string;
+  level: TaskUrgencyLevel;
+  daysToDeadline: number;
+  daysSinceCreated: number;
+  uncheckedCount: number;
+  noConclusionCount: number;
+  uncheckedEvents: Array<{eventId: string; busPlate: string; routeName: string; fenceName: string;}>;
+  noConclusionEvents: Array<{eventId: string; busPlate: string; routeName: string; fenceName: string;}>;
+}
+
+interface WeeklyMeetingMaterial {
+  title: string;
+  generatedAt: string;
+  schoolRanking: Array<{rank: number; schoolName: string; riskCount7: number; riskCount30: number; pendingTasks: number; overdueRects: number;}>;
+  keyEvents: Array<{no: number; schoolName: string; busPlate: string; description: string; riskLevel: string; time: string;}>;
+  pendingTasks: Array<{no: number; taskName: string; assignee: string; deadline: string; urgency: string; uncheckedCount: number;}>;
+  overdueRectifications: Array<{no: number; schoolName: string; type: string; requirement: string; deadline: string; overdueDays: number;}>;
+  textSummary: string;
 }
 
 interface AppStore extends Omit<AppState, 'dispatch'> {
@@ -477,6 +507,19 @@ interface AppStore extends Omit<AppState, 'dispatch'> {
       summary: string;
     }>;
   };
+
+  getTaskUrgencyInfo: (taskId: string) => TaskUrgencyInfo;
+
+  getWeeklyMeetingMaterial: (schoolId?: string) => WeeklyMeetingMaterial;
+
+  getDashboardDetailData: (schoolId: string) => {
+    events7: FenceEvent[];
+    events30: FenceEvent[];
+    tasks7: InspectionTask[];
+    tasks30: InspectionTask[];
+    rects7: Rectification[];
+    rects30: Rectification[];
+  };
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -603,9 +646,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const state = get();
     if (state.selectedEventIds.length === 0) return;
 
-    const events = state.riskEvents.filter((e) =>
-      state.selectedEventIds.includes(e.id)
-    );
+    const visibleEvents = state.getFilteredEvents();
+    const events = visibleEvents.filter((e) => state.selectedEventIds.includes(e.id));
 
     const items: InspectionTaskItem[] = events.map((event) => ({
       eventId: event.id,
@@ -880,6 +922,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         pendingTasks: 0,
         inProgressTasks: 0,
         completedTasks: 0,
+        approachingTasks: 0,
+        overdueTasks: 0,
+        longPendingTasks: 0,
       };
     }
 
@@ -913,11 +958,34 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const info = getSchoolInfoByRoute(item.event.routeId);
         schoolIds.add(info.schoolId);
       }
+
+      let urgencyLevel: TaskUrgencyLevel = 'normal';
+      if (task.status !== 'completed') {
+        const daysToDeadline = differenceInDays(task.deadline, now);
+        const daysSinceCreated = differenceInDays(now, task.createdAt);
+        const total = task.items.length;
+        const checkedWithConclusion = task.items.filter(
+          (i) => i.checked && i.conclusion && i.conclusion.trim().length > 0
+        ).length;
+        const completionRate = total > 0 ? Math.round((checkedWithConclusion / total) * 100) : 0;
+
+        if (task.deadline < now) {
+          urgencyLevel = 'overdue';
+        } else if (daysToDeadline >= 0 && daysToDeadline <= 3) {
+          urgencyLevel = 'approaching';
+        } else if (daysSinceCreated >= 10 && completionRate < 50) {
+          urgencyLevel = 'long_pending';
+        }
+      }
+
       for (const schoolId of schoolIds) {
         if (schoolStatsMap[schoolId]) {
           if (task.status === 'pending') schoolStatsMap[schoolId].pendingTasks++;
           if (task.status === 'in_progress') schoolStatsMap[schoolId].inProgressTasks++;
           if (task.status === 'completed') schoolStatsMap[schoolId].completedTasks++;
+          if (urgencyLevel === 'approaching') schoolStatsMap[schoolId].approachingTasks++;
+          if (urgencyLevel === 'overdue') schoolStatsMap[schoolId].overdueTasks++;
+          if (urgencyLevel === 'long_pending') schoolStatsMap[schoolId].longPendingTasks++;
         }
       }
     }
@@ -1059,6 +1127,333 @@ export const useAppStore = create<AppStore>((set, get) => ({
       riskEvents: riskEventsData,
       rectifications: rectificationsData,
       inspectionTasks: inspectionTasksData,
+    };
+  },
+
+  getTaskUrgencyInfo: (taskId) => {
+    const state = get();
+    const task = state.inspectionTasks.find((t) => t.id === taskId);
+    const now = new Date();
+
+    if (!task) {
+      return {
+        taskId,
+        taskName: '',
+        assignee: '',
+        level: 'normal' as TaskUrgencyLevel,
+        daysToDeadline: 0,
+        daysSinceCreated: 0,
+        uncheckedCount: 0,
+        noConclusionCount: 0,
+        uncheckedEvents: [],
+        noConclusionEvents: [],
+      };
+    }
+
+    const daysToDeadline = differenceInDays(task.deadline, now);
+    const daysSinceCreated = differenceInDays(now, task.createdAt);
+    const total = task.items.length;
+    const checkedWithConclusion = task.items.filter(
+      (i) => i.checked && i.conclusion && i.conclusion.trim().length > 0
+    ).length;
+    const completionRate = total > 0 ? Math.round((checkedWithConclusion / total) * 100) : 0;
+
+    let level: TaskUrgencyLevel = 'normal';
+    if (task.status !== 'completed') {
+      if (task.deadline < now) {
+        level = 'overdue';
+      } else if (daysToDeadline >= 0 && daysToDeadline <= 3) {
+        level = 'approaching';
+      } else if (daysSinceCreated >= 10 && completionRate < 50) {
+        level = 'long_pending';
+      }
+    }
+
+    const uncheckedItems = task.items.filter((i) => !i.checked);
+    const noConclusionItems = task.items.filter(
+      (i) => i.checked && (!i.conclusion || i.conclusion.trim().length === 0)
+    );
+
+    const uncheckedEvents = uncheckedItems.map((item) => ({
+      eventId: item.event.id,
+      busPlate: item.event.busPlate,
+      routeName: item.event.routeName,
+      fenceName: item.event.fenceName,
+    }));
+
+    const noConclusionEvents = noConclusionItems.map((item) => ({
+      eventId: item.event.id,
+      busPlate: item.event.busPlate,
+      routeName: item.event.routeName,
+      fenceName: item.event.fenceName,
+    }));
+
+    return {
+      taskId: task.id,
+      taskName: task.name,
+      assignee: task.assignee,
+      level,
+      daysToDeadline,
+      daysSinceCreated,
+      uncheckedCount: uncheckedItems.length,
+      noConclusionCount: noConclusionItems.length,
+      uncheckedEvents,
+      noConclusionEvents,
+    };
+  },
+
+  getWeeklyMeetingMaterial: (schoolId?) => {
+    const state = get();
+    const now = new Date();
+    const sevenDaysAgo = addDays(now, -7);
+    const thirtyDaysAgo = addDays(now, -30);
+
+    const allEvents = state.riskEvents;
+    const allRects = state.rectifications;
+    const allTasks = state.inspectionTasks;
+
+    const filterBySchool = (routeId: string) => {
+      if (!schoolId) return true;
+      const info = getSchoolInfoByRoute(routeId);
+      return info.schoolId === schoolId;
+    };
+
+    const events7 = allEvents.filter(
+      (e) =>
+        isDateInRange(e.entryTime, sevenDaysAgo, now) &&
+        (e.riskLevel === 'high' || e.riskLevel === 'critical') &&
+        filterBySchool(e.routeId)
+    );
+
+    const events30 = allEvents.filter(
+      (e) =>
+        isDateInRange(e.entryTime, thirtyDaysAgo, now) &&
+        (e.riskLevel === 'high' || e.riskLevel === 'critical') &&
+        filterBySchool(e.routeId)
+    );
+
+    const schoolRankingMap: Record<string, {
+      schoolName: string;
+      riskCount7: number;
+      riskCount30: number;
+      pendingTasks: number;
+      overdueRects: number;
+    }> = {};
+
+    for (const school of schools) {
+      if (schoolId && school.id !== schoolId) continue;
+      schoolRankingMap[school.id] = {
+        schoolName: school.name,
+        riskCount7: 0,
+        riskCount30: 0,
+        pendingTasks: 0,
+        overdueRects: 0,
+      };
+    }
+
+    for (const event of events7) {
+      const info = getSchoolInfoByRoute(event.routeId);
+      if (schoolRankingMap[info.schoolId]) {
+        schoolRankingMap[info.schoolId].riskCount7++;
+      }
+    }
+    for (const event of events30) {
+      const info = getSchoolInfoByRoute(event.routeId);
+      if (schoolRankingMap[info.schoolId]) {
+        schoolRankingMap[info.schoolId].riskCount30++;
+      }
+    }
+
+    for (const rect of allRects) {
+      if (schoolId && rect.schoolId !== schoolId) continue;
+      if (schoolRankingMap[rect.schoolId]) {
+        if (rect.status === 'overdue' || (rect.status === 'pending' && rect.deadline < now)) {
+          schoolRankingMap[rect.schoolId].overdueRects++;
+        }
+      }
+    }
+
+    for (const task of allTasks) {
+      if (task.status === 'completed') continue;
+      const taskSchoolIds = new Set<string>();
+      for (const item of task.items) {
+        const info = getSchoolInfoByRoute(item.event.routeId);
+        taskSchoolIds.add(info.schoolId);
+      }
+      for (const sid of taskSchoolIds) {
+        if (schoolId && sid !== schoolId) continue;
+        if (schoolRankingMap[sid]) {
+          schoolRankingMap[sid].pendingTasks++;
+        }
+      }
+    }
+
+    const schoolRanking = Object.entries(schoolRankingMap)
+      .map(([_, data], idx) => ({
+        rank: idx + 1,
+        ...data,
+      }))
+      .sort((a, b) => b.riskCount7 - a.riskCount7)
+      .slice(0, 10)
+      .map((item, idx) => ({ ...item, rank: idx + 1 }));
+
+    const keyEventsSource = allEvents
+      .filter(
+        (e) =>
+          isDateInRange(e.entryTime, sevenDaysAgo, now) &&
+          (e.riskLevel === 'high' || e.riskLevel === 'critical') &&
+          filterBySchool(e.routeId)
+      )
+      .sort((a, b) => b.riskScore - a.riskScore)
+      .slice(0, 15);
+
+    const keyEvents = keyEventsSource.map((event, idx) => {
+      const info = getSchoolInfoByRoute(event.routeId);
+      const tagDescriptions = event.riskTags.map((t) => t.description).join('、');
+      const fenceTypeLabel = FENCE_TYPE_LABELS[event.fenceType];
+      const description = `${tagDescriptions} - ${fenceTypeLabel}（${event.fenceName}）`;
+      return {
+        no: idx + 1,
+        schoolName: info.schoolName,
+        busPlate: event.busPlate,
+        description,
+        riskLevel: RISK_LEVEL_LABELS[event.riskLevel],
+        time: format(event.entryTime, 'yyyy-MM-dd HH:mm'),
+      };
+    });
+
+    const pendingTasksFiltered = allTasks.filter((t) => {
+      if (t.status === 'completed') return false;
+      if (!schoolId) return true;
+      return t.items.some((item) => {
+        const info = getSchoolInfoByRoute(item.event.routeId);
+        return info.schoolId === schoolId;
+      });
+    });
+
+    const urgencyLabels: Record<TaskUrgencyLevel, string> = {
+      normal: '正常',
+      approaching: '临近截止',
+      overdue: '已超期',
+      long_pending: '长期未填',
+    };
+
+    const pendingTasks = pendingTasksFiltered.map((task, idx) => {
+      const urgencyInfo = state.getTaskUrgencyInfo(task.id);
+      return {
+        no: idx + 1,
+        taskName: task.name,
+        assignee: task.assignee,
+        deadline: format(task.deadline, 'yyyy-MM-dd'),
+        urgency: urgencyLabels[urgencyInfo.level],
+        uncheckedCount: urgencyInfo.uncheckedCount + urgencyInfo.noConclusionCount,
+      };
+    });
+
+    const overdueRects = allRects
+      .filter((r) => {
+        const isOverdue = r.status === 'overdue' || (r.status === 'pending' && r.deadline < now);
+        if (!isOverdue) return false;
+        if (schoolId && r.schoolId !== schoolId) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const overdueA = Math.abs(differenceInDays(a.deadline, now));
+        const overdueB = Math.abs(differenceInDays(b.deadline, now));
+        return overdueB - overdueA;
+      })
+      .map((rect, idx) => ({
+        no: idx + 1,
+        schoolName: rect.schoolName,
+        type: RECTIFICATION_TYPE_LABELS[rect.type],
+        requirement: rect.requirement.length > 30 ? rect.requirement.slice(0, 30) + '...' : rect.requirement,
+        deadline: format(rect.deadline, 'yyyy-MM-dd'),
+        overdueDays: Math.abs(differenceInDays(rect.deadline, now)),
+      }));
+
+    let textSummary = '';
+    textSummary += '========== 校车电子围栏监管周例会材料 ==========\n';
+    textSummary += `生成时间：${format(now, 'yyyy-MM-dd HH:mm')}\n`;
+    textSummary += `统计周期：近7天(${format(sevenDaysAgo, 'yyyy-MM-dd')}~${format(now, 'yyyy-MM-dd')}) / 近30天(${format(thirtyDaysAgo, 'yyyy-MM-dd')}~${format(now, 'yyyy-MM-dd')})\n\n`;
+
+    textSummary += '一、风险学校排行（前10名）\n';
+    schoolRanking.forEach((s) => {
+      textSummary += `  ${s.rank}. ${s.schoolName}     - 近7天高风险${s.riskCount7}件，近30天${s.riskCount30}件，待办任务${s.pendingTasks}项，超期整改${s.overdueRects}件\n`;
+    });
+    textSummary += '\n';
+
+    textSummary += '二、重点关注事件（前15件）\n';
+    keyEvents.forEach((e) => {
+      textSummary += `  ${e.no}. [${e.riskLevel}] ${e.schoolName} - ${e.busPlate}：${e.description}（${e.time.slice(0, 10)}）\n`;
+    });
+    textSummary += '\n';
+
+    textSummary += '三、未完成抽查任务\n';
+    pendingTasks.forEach((t) => {
+      textSummary += `  ${t.no}. [${t.urgency}] ${t.taskName} - 抽查人：${t.assignee} | 截止：${t.deadline} | 还有${t.uncheckedCount}条事件未核查\n`;
+    });
+    textSummary += '\n';
+
+    textSummary += '四、整改超期清单\n';
+    overdueRects.forEach((r) => {
+      textSummary += `  ${r.no}. ${r.schoolName} - [${r.type}]${r.requirement}（超期${r.overdueDays}天，截止${r.deadline}）\n`;
+    });
+    textSummary += '========== END ==========\n';
+
+    return {
+      title: '校车电子围栏监管周例会材料',
+      generatedAt: format(now, 'yyyy-MM-dd HH:mm'),
+      schoolRanking,
+      keyEvents,
+      pendingTasks,
+      overdueRectifications: overdueRects,
+      textSummary,
+    };
+  },
+
+  getDashboardDetailData: (schoolId) => {
+    const state = get();
+    const now = new Date();
+    const sevenDaysAgo = addDays(now, -7);
+    const thirtyDaysAgo = addDays(now, -30);
+
+    const filterBySchool = (routeId: string) => {
+      const info = getSchoolInfoByRoute(routeId);
+      return info.schoolId === schoolId;
+    };
+
+    const events7 = state.riskEvents.filter(
+      (e) => isDateInRange(e.entryTime, sevenDaysAgo, now) && filterBySchool(e.routeId)
+    );
+    const events30 = state.riskEvents.filter(
+      (e) => isDateInRange(e.entryTime, thirtyDaysAgo, now) && filterBySchool(e.routeId)
+    );
+
+    const tasks7 = state.inspectionTasks.filter((t) => {
+      const inDateRange = isDateInRange(t.createdAt, sevenDaysAgo, now);
+      const hasSchool = t.items.some((item) => filterBySchool(item.event.routeId));
+      return inDateRange && hasSchool;
+    });
+    const tasks30 = state.inspectionTasks.filter((t) => {
+      const inDateRange = isDateInRange(t.createdAt, thirtyDaysAgo, now);
+      const hasSchool = t.items.some((item) => filterBySchool(item.event.routeId));
+      return inDateRange && hasSchool;
+    });
+
+    const rects7 = state.rectifications.filter(
+      (r) => isDateInRange(r.createdAt, sevenDaysAgo, now) && r.schoolId === schoolId
+    );
+    const rects30 = state.rectifications.filter(
+      (r) => isDateInRange(r.createdAt, thirtyDaysAgo, now) && r.schoolId === schoolId
+    );
+
+    return {
+      events7,
+      events30,
+      tasks7,
+      tasks30,
+      rects7,
+      rects30,
     };
   },
 }));
